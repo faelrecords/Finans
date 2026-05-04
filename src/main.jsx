@@ -678,10 +678,21 @@ function filterRows(rows, filters) {
     if (filters.to && r.date > filters.to) return false;
     if (filters.type && r.type !== filters.type) return false;
     if (filters.category && r.category !== filters.category) return false;
-    if (filters.group && r.group !== filters.group) return false;
-    if (filters.account && r.account !== filters.account) return false;
+    if (filters.group && r.group !== filters.group && !paymentSlice(r, filters).matched) return false;
+    if (filters.account && r.account !== filters.account && !paymentSlice(r, filters).matched) return false;
     return true;
+  }).map(r => {
+    const slice = paymentSlice(r, filters);
+    return slice.matched ? { ...r, amount: slice.amount, display_amount: slice.amount, original_amount: r.amount } : r;
   });
+}
+
+function paymentSlice(row, filters) {
+  const payments = row.payments || [];
+  if (!payments.length || (!filters.group && !filters.account)) return { matched: false, amount: 0 };
+  const selected = payments.filter(p => (!filters.group || p.group === filters.group) && (!filters.account || p.account === filters.account));
+  const amount = selected.reduce((sum, p) => sum + Number(p.amount || 0), 0);
+  return { matched: selected.length > 0, amount };
 }
 
 function applyTheme(theme) {
