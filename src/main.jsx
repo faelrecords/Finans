@@ -102,6 +102,7 @@ function App() {
   const [user, setUser] = useState(api.user);
   const [tab, setTab] = useState('dashboard');
   const readOnly = user?.role === 'user';
+  useEffect(() => applySavedTheme(), []);
   if (!user) return <Login onLogin={setUser} />;
   function logout() {
     api.setAuth(null, null);
@@ -117,7 +118,7 @@ function App() {
           ] : [
             ['dashboard', 'Dashboards'],
             ['transacoes', 'Transações'],
-            ['categorias', 'Categorias'],
+            ['config', 'Configurações'],
             ['usuarios', 'Usuários']
           ]).map(([key, label]) => <button key={key} className={`nav-link ${tab === key ? 'active' : ''}`} onClick={() => setTab(key)}>{label}</button>)}
         </div>
@@ -126,7 +127,7 @@ function App() {
       <main className="container">
         {tab === 'dashboard' && <Dashboard readOnly={readOnly} />}
         {!readOnly && tab === 'transacoes' && <Transactions />}
-        {!readOnly && tab === 'categorias' && <Categories />}
+        {!readOnly && tab === 'config' && <Settings />}
         {!readOnly && tab === 'usuarios' && <Users />}
       </main>
     </>
@@ -137,6 +138,7 @@ function Dashboard({ readOnly = false }) {
   const [rows, setRows] = useState([]);
   const [categories, setCategories] = useState([]);
   const [groups, setGroups] = useState([]);
+  const [accounts, setAccounts] = useState([]);
   const [dashboards, setDashboards] = useState([]);
   const [active, setActive] = useState(null);
   const [widgets, setWidgets] = useState([]);
@@ -144,10 +146,8 @@ function Dashboard({ readOnly = false }) {
   const [showWidget, setShowWidget] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [filters, setFilters] = useState({ from: '', to: '', type: '', category: '', group: '', account: '' });
-  const month = today().slice(0, 7);
   const filteredRows = useMemo(() => filterRows(rows, filters), [rows, filters]);
-  const monthRows = filteredRows.filter(r => monthKey(r.date) === month);
-  const accounts = useMemo(() => uniqueOptions(rows, 'account'), [rows]);
+  const accountNames = useMemo(() => [...new Set([...accounts.map(a => a.name), ...uniqueOptions(rows, 'account')].filter(Boolean))], [accounts, rows]);
 
   async function loadDashboards() {
     const list = await api.get('/dashboards');
@@ -158,23 +158,21 @@ function Dashboard({ readOnly = false }) {
   async function load() {
     const list = dashboards.length ? dashboards : await loadDashboards();
     const dash = active || list[0];
-    const [tx, ws, cats, gs] = await Promise.all([
+    const [tx, ws, cats, gs, accs] = await Promise.all([
       api.get('/transactions'),
       dash ? api.get(`/widgets?dashboard_id=${dash.id}`) : [],
       api.get('/categories'),
-      api.get('/groups')
+      api.get('/groups'),
+      api.get('/accounts')
     ]);
     setRows(tx);
     setWidgets(ws);
     setCategories(cats);
     setGroups(gs);
+    setAccounts(accs);
   }
   useEffect(() => { loadDashboards(); }, []);
   useEffect(() => { if (active) load(); }, [active?.id]);
-
-  const income = aggregate(monthRows, 'income');
-  const expense = aggregate(monthRows, 'expense');
-  const balance = aggregate(filteredRows, 'balance');
 
   async function createDashboard() {
     const title = prompt('Nome da dashboard?') || 'Nova dashboard';
@@ -224,12 +222,6 @@ function Dashboard({ readOnly = false }) {
         {dashboards.map(d => <button key={d.id} className={`range-pill ${active?.id === d.id ? 'active' : ''}`} onClick={() => setActive(d)}>{d.title}</button>)}
         {!readOnly && <button className="range-pill add" onClick={createDashboard}>NewTab</button>}
       </div>
-      <section className="quick-grid">
-        <div className="glass-sm"><label>Saldo</label><strong>{money(balance)}</strong></div>
-        <div className="glass-sm"><label>Entradas mês</label><strong>{money(income)}</strong></div>
-        <div className="glass-sm"><label>Saídas mês</label><strong>{money(expense)}</strong></div>
-        <div className="glass-sm"><label>Resultado mês</label><strong>{money(income - expense)}</strong></div>
-      </section>
       {widgets.length === 0 ? (
         <div className="glass empty-state"><h3>Nenhum widget ainda</h3>{!readOnly && <button className="btn accent mt-2" onClick={() => setShowWidget(true)}>+ Criar widget</button>}</div>
       ) : (
@@ -237,7 +229,7 @@ function Dashboard({ readOnly = false }) {
           {widgets.map(w => <WidgetCard key={w.id} widget={w} rows={filteredRows} categories={categories} onEdit={readOnly ? null : () => setEditing(w)} onDelete={readOnly ? null : () => deleteWidget(w.id)} />)}
         </div>
       )}
-      {filtersOpen && <FilterDrawer filters={filters} setFilters={setFilters} categories={categories} groups={groups} accounts={accounts} onClose={() => setFiltersOpen(false)} />}
+      {filtersOpen && <FilterDrawer filters={filters} setFilters={setFilters} categories={categories} groups={groups} accounts={accountNames} onClose={() => setFiltersOpen(false)} />}
       {(showWidget || editing) && <WidgetEditor initial={editing} onClose={() => { setEditing(null); setShowWidget(false); }} onSave={saveWidget} />}
     </div>
   );
@@ -308,20 +300,23 @@ function WidgetEditor({ initial, onClose, onSave }) {
 function Transactions() {
   const [rows, setRows] = useState([]);
   const [groups, setGroups] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [accounts, setAccounts] = useState([]);
   const [groupFilter, setGroupFilter] = useState('');
-  const [groupForm, setGroupForm] = useState({ name: '', color: COLORS[0] });
   const [form, setForm] = useState({ date: today(), type: 'expense', description: '', category: '', group: '', account: '', amount: '' });
   const [editing, setEditing] = useState(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [filters, setFilters] = useState({ from: '', to: '', type: '', category: '', group: '', account: '' });
   async function load() {
-    const [tx, gs] = await Promise.all([api.get('/transactions'), api.get('/groups')]);
+    const [tx, gs, cats, accs] = await Promise.all([api.get('/transactions'), api.get('/groups'), api.get('/categories'), api.get('/accounts')]);
     setRows(tx);
     setGroups(gs);
+    setCategories(cats);
+    setAccounts(accs);
   }
   useEffect(() => { load(); }, []);
-  const categories = useMemo(() => uniqueOptions(rows, 'category').map(name => ({ name })), [rows]);
-  const accounts = useMemo(() => uniqueOptions(rows, 'account'), [rows]);
+  const categoryOptions = useMemo(() => mergeNamed(categories, uniqueOptions(rows, 'category')), [categories, rows]);
+  const accountOptions = useMemo(() => mergeNamed(accounts, uniqueOptions(rows, 'account')), [accounts, rows]);
   const visibleRows = useMemo(() => filterRows(groupFilter ? rows.filter(r => r.group === groupFilter) : rows, filters), [rows, groupFilter, filters]);
   async function save(e) {
     e.preventDefault();
@@ -341,21 +336,6 @@ function Transactions() {
     await api.del('/transactions/' + r.id);
     load();
   }
-  async function addGroup(e) {
-    e.preventDefault();
-    await api.post('/groups', groupForm);
-    setGroupForm({ name: '', color: COLORS[0] });
-    load();
-  }
-  async function updateGroup(g, color) {
-    await api.put('/groups/' + g.id, { ...g, color });
-    load();
-  }
-  async function deleteGroup(g) {
-    if (!confirm('Excluir grupo?')) return;
-    await api.del('/groups/' + g.id);
-    load();
-  }
   async function exportXLS() {
     const ws = XLSX.utils.json_to_sheet(visibleRows.map(r => ({ Data: r.date, Tipo: r.type, Descrição: r.description, Categoria: r.category, Grupo: r.group, 'Cartão/Conta': r.account, Valor: r.amount })));
     const wb = XLSX.utils.book_new();
@@ -366,27 +346,19 @@ function Transactions() {
     <div>
       <div className="page-header"><div><h1>Transações</h1><div className="subtitle">Entradas, saídas, cartões, contas e categorias</div></div><div className="row-flex"><button className="btn" onClick={() => setFiltersOpen(true)}>Filtros</button><button className="btn" onClick={exportXLS}>↓ Excel</button></div></div>
       <section className="glass mb-2">
-        <div className="label mb-2">Grupos</div>
+        <div className="label mb-2">Filtro rápido</div>
         <div className="row-flex mb-2">
           <button className={`range-pill ${!groupFilter ? 'active' : ''}`} onClick={() => setGroupFilter('')}>Todos</button>
           {groups.map(g => <button key={g.id} className={`range-pill ${groupFilter === g.name ? 'active' : ''}`} onClick={() => setGroupFilter(g.name)}><span className="dot" style={{ background: g.color }} />{g.name}</button>)}
-        </div>
-        <form className="row-flex" onSubmit={addGroup}>
-          <input className="input compact" placeholder="Novo grupo" value={groupForm.name} onChange={e => setGroupForm({ ...groupForm, name: e.target.value })} />
-          <input className="color-input" type="color" value={groupForm.color} onChange={e => setGroupForm({ ...groupForm, color: e.target.value })} />
-          <button className="btn accent">+ Grupo</button>
-        </form>
-        <div className="group-list">
-          {groups.map(g => <div className="group-row" key={g.id}><span className="badge"><span className="dot" style={{ background: g.color }} />{g.name}</span><input className="color-input" type="color" value={g.color} onChange={e => updateGroup(g, e.target.value)} /><button className="btn sm danger" onClick={() => deleteGroup(g)}>×</button></div>)}
         </div>
       </section>
       <form className="glass form-grid" onSubmit={save}>
         <input className="input" type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} />
         <select className="select" value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}><option value="expense">Saída</option><option value="income">Entrada</option></select>
         <input className="input" placeholder="Descrição" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
-        <input className="input" placeholder="Categoria" value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} />
+        <select className="select" value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}><option value="">Categoria</option>{categoryOptions.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}</select>
         <select className="select" value={form.group} onChange={e => setForm({ ...form, group: e.target.value })}><option value="">Grupo</option>{groups.map(g => <option key={g.id} value={g.name}>{g.name}</option>)}</select>
-        <input className="input" placeholder="Cartão/Conta" value={form.account} onChange={e => setForm({ ...form, account: e.target.value })} />
+        <select className="select" value={form.account} onChange={e => setForm({ ...form, account: e.target.value })}><option value="">Conta/Cartão</option>{accountOptions.map(a => <option key={a.name} value={a.name}>{a.name}</option>)}</select>
         <input className="input" placeholder="Valor" type="number" step="0.01" value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} />
         <button className="btn accent">{editing ? 'Atualizar' : 'Salvar'}</button>
         {editing && <button type="button" className="btn ghost" onClick={() => { setEditing(null); setForm({ date: today(), type: 'expense', description: '', category: '', group: '', account: '', amount: '' }); }}>Cancelar</button>}
@@ -395,50 +367,96 @@ function Transactions() {
         <table><thead><tr><th>Data</th><th>Tipo</th><th>Descrição</th><th>Categoria</th><th>Grupo</th><th>Cartão/Conta</th><th>Valor</th><th></th></tr></thead>
         <tbody>{visibleRows.map(r => <tr key={r.id}><td>{brDate(r.date)}</td><td>{r.type === 'income' ? 'Entrada' : 'Saída'}</td><td>{r.description}</td><td>{r.category}</td><td>{r.group}</td><td>{r.account}</td><td>{money(r.amount)}</td><td><div className="table-actions"><button className="btn sm" onClick={() => editRow(r)}>Editar</button><button className="btn sm danger" onClick={() => delRow(r)}>×</button></div></td></tr>)}</tbody></table>
       </section>
-      {filtersOpen && <FilterDrawer filters={filters} setFilters={setFilters} categories={categories} groups={groups} accounts={accounts} onClose={() => setFiltersOpen(false)} />}
+      {filtersOpen && <FilterDrawer filters={filters} setFilters={setFilters} categories={categoryOptions} groups={groups} accounts={accountOptions.map(a => a.name)} onClose={() => setFiltersOpen(false)} />}
     </div>
   );
 }
 
-function Categories() {
+function Settings() {
+  return (
+    <div>
+      <div className="page-header"><div><h1>Configurações</h1><div className="subtitle">Cadastros usados nos filtros e transações</div></div></div>
+      <AppearanceManager />
+      <div className="settings-grid">
+        <ConfigManager title="Tags" endpoint="/categories" emptyName="Nova tag" />
+        <ConfigManager title="Grupos" endpoint="/groups" emptyName="Novo grupo" />
+        <ConfigManager title="Contas e cartões" endpoint="/accounts" emptyName="Nova conta" hasType />
+      </div>
+    </div>
+  );
+}
+
+function AppearanceManager() {
+  useEffect(() => applySavedTheme(), []);
+  async function upload(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const text = await file.text();
+    const colors = [...new Set(text.match(/#[0-9a-fA-F]{6}/g) || [])];
+    if (!colors.length) return alert('Arquivo sem cores hex.');
+    const theme = {
+      '--accent': colors[0],
+      '--accent-strong': colors[1] || colors[0],
+      '--accent-text': colors[2] || colors[1] || colors[0],
+      '--bg-glow-primary': hexToRgba(colors[0], 0.14)
+    };
+    localStorage.setItem('finans_theme', JSON.stringify(theme));
+    applyTheme(theme);
+  }
+  function reset() {
+    localStorage.removeItem('finans_theme');
+    location.reload();
+  }
+  return (
+    <section className="glass mb-2">
+      <div className="settings-head"><div><h3>Visual</h3><div className="subtitle">Importar padrão por .md</div></div><div className="row-flex"><label className="btn"><input type="file" accept=".md,text/markdown" hidden onChange={upload} />Trocar visual</label><button className="btn danger" onClick={reset}>Reset</button></div></div>
+    </section>
+  );
+}
+
+function ConfigManager({ title, endpoint, emptyName, hasType = false }) {
   const [rows, setRows] = useState([]);
-  const [form, setForm] = useState({ name: '', color: COLORS[0] });
-  async function load() { setRows(await api.get('/categories')); }
+  const [form, setForm] = useState({ name: '', color: COLORS[0], type: 'account' });
+  const [editing, setEditing] = useState(null);
+  async function load() { setRows(await api.get(endpoint)); }
   useEffect(() => { load(); }, []);
-  async function add(e) {
+  async function save(e) {
     e.preventDefault();
-    await api.post('/categories', form);
-    setForm({ name: '', color: COLORS[0] });
+    const payload = { ...form, name: form.name || emptyName };
+    if (editing) await api.put(endpoint + '/' + editing.id, payload);
+    else await api.post(endpoint, payload);
+    setEditing(null);
+    setForm({ name: '', color: COLORS[0], type: 'account' });
     load();
   }
-  async function setColor(c, color) {
-    await api.put('/categories/' + c.id, { ...c, color });
-    load();
+  function edit(row) {
+    setEditing(row);
+    setForm({ name: row.name, color: row.color || COLORS[0], type: row.type || 'account' });
   }
-  async function del(c) {
-    if (!confirm('Excluir categoria?')) return;
-    await api.del('/categories/' + c.id);
+  async function del(row) {
+    if (!confirm('Excluir item?')) return;
+    await api.del(endpoint + '/' + row.id);
     load();
   }
   return (
-    <div><div className="page-header"><div><h1>Categorias</h1><div className="subtitle">Classificação de entradas e saídas</div></div></div>
-      <section className="glass">
-        <form className="row-flex mb-2" onSubmit={add}>
-          <input className="input" placeholder="Categoria" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
-          <div className="color-picker">{COLORS.map(c => <button type="button" key={c} className={`color-dot ${form.color === c ? 'selected' : ''}`} style={{ background: c }} onClick={() => setForm({ ...form, color: c })} />)}</div>
-          <button className="btn accent">Adicionar</button>
-        </form>
-        <div className="category-list">
-          {rows.map(c => (
-            <div className="category-row" key={c.id}>
-              <span className="badge"><span className="dot" style={{ background: c.color }} />{c.name}</span>
-              <div className="color-picker small">{COLORS.map(color => <button type="button" key={color} className={`color-dot ${c.color === color ? 'selected' : ''}`} style={{ background: color }} onClick={() => setColor(c, color)} />)}</div>
-              <button className="btn sm danger" onClick={() => del(c)}>×</button>
-            </div>
-          ))}
-        </div>
-      </section>
-    </div>
+    <section className="glass config-card">
+      <h3>{title}</h3>
+      <form className="config-form" onSubmit={save}>
+        <input className="input" placeholder="Nome" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
+        {hasType && <select className="select" value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}><option value="account">Conta</option><option value="card">Cartão</option></select>}
+        <input className="color-input" type="color" value={form.color} onChange={e => setForm({ ...form, color: e.target.value })} />
+        <button className="btn accent">{editing ? 'Atualizar' : 'Adicionar'}</button>
+        {editing && <button type="button" className="btn ghost" onClick={() => { setEditing(null); setForm({ name: '', color: COLORS[0], type: 'account' }); }}>Cancelar</button>}
+      </form>
+      <div className="category-list">
+        {rows.map(row => (
+          <div className="config-row" key={row.id}>
+            <span className="badge"><span className="dot" style={{ background: row.color }} />{row.name}{row.type ? ` · ${row.type === 'card' ? 'Cartão' : 'Conta'}` : ''}</span>
+            <div className="table-actions"><button className="btn sm" onClick={() => edit(row)}>Editar</button><button className="btn sm danger" onClick={() => del(row)}>×</button></div>
+          </div>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -487,6 +505,13 @@ function uniqueOptions(rows, key) {
   return [...new Set(rows.map(r => r[key]).filter(Boolean))];
 }
 
+function mergeNamed(rows, names) {
+  const map = new Map();
+  rows.forEach(r => map.set(r.name, r));
+  names.forEach(name => { if (!map.has(name)) map.set(name, { name }); });
+  return [...map.values()];
+}
+
 function filterRows(rows, filters) {
   return rows.filter(r => {
     if (filters.from && r.date < filters.from) return false;
@@ -497,6 +522,20 @@ function filterRows(rows, filters) {
     if (filters.account && r.account !== filters.account) return false;
     return true;
   });
+}
+
+function applyTheme(theme) {
+  Object.entries(theme).forEach(([key, value]) => document.documentElement.style.setProperty(key, value));
+}
+
+function applySavedTheme() {
+  const raw = localStorage.getItem('finans_theme');
+  if (raw) applyTheme(JSON.parse(raw));
+}
+
+function hexToRgba(hex, alpha) {
+  const n = parseInt(hex.slice(1), 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
 }
 
 function FilterDrawer({ filters, setFilters, categories, groups, accounts, onClose }) {
