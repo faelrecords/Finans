@@ -118,6 +118,7 @@ function App() {
           ] : [
             ['dashboard', 'Dashboards'],
             ['transacoes', 'Transações'],
+            ['dividas', 'Dívidas'],
             ['mercado', 'Mercado'],
             ['config', 'Configurações'],
             ['usuarios', 'Usuários']
@@ -128,6 +129,7 @@ function App() {
       <main className="container">
         {tab === 'dashboard' && <Dashboard readOnly={readOnly} />}
         {!readOnly && tab === 'transacoes' && <Transactions />}
+        {!readOnly && tab === 'dividas' && <Debts />}
         {!readOnly && tab === 'mercado' && <Market />}
         {!readOnly && tab === 'config' && <Settings />}
         {!readOnly && tab === 'usuarios' && <Users />}
@@ -371,6 +373,95 @@ function Transactions() {
       </section>
       {filtersOpen && <FilterDrawer filters={filters} setFilters={setFilters} categories={categoryOptions} groups={groups} accounts={accountOptions.map(a => a.name)} onClose={() => setFiltersOpen(false)} />}
     </div>
+  );
+}
+
+function Debts() {
+  const [rows, setRows] = useState([]);
+  const [groups, setGroups] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [accounts, setAccounts] = useState([]);
+  const [form, setForm] = useState({ date: today(), due_date: '', creditor: '', description: '', category: '', group: '', account: '', amount: '' });
+  const [editing, setEditing] = useState(null);
+  const [paying, setPaying] = useState(null);
+  const [payForm, setPayForm] = useState({ date: today(), account: '', amount: '' });
+  async function load() {
+    const [ds, gs, cats, accs] = await Promise.all([api.get('/debts'), api.get('/groups'), api.get('/categories'), api.get('/accounts')]);
+    setRows(ds);
+    setGroups(gs);
+    setCategories(cats);
+    setAccounts(accs);
+  }
+  useEffect(() => { load(); }, []);
+  async function save(e) {
+    e.preventDefault();
+    const payload = { ...form, amount: Number(form.amount) || 0 };
+    if (editing) await api.put('/debts/' + editing.id, payload);
+    else await api.post('/debts', payload);
+    setEditing(null);
+    setForm({ date: today(), due_date: '', creditor: '', description: '', category: '', group: '', account: '', amount: '' });
+    load();
+  }
+  function edit(row) {
+    setEditing(row);
+    setForm({ date: row.date, due_date: row.due_date || '', creditor: row.creditor || '', description: row.description || '', category: row.category || '', group: row.group || '', account: row.account || '', amount: row.amount });
+  }
+  async function del(row) {
+    if (!confirm('Excluir dívida?')) return;
+    await api.del('/debts/' + row.id);
+    load();
+  }
+  function openPay(row) {
+    setPaying(row);
+    setPayForm({ date: today(), account: row.account || '', amount: row.amount });
+  }
+  async function pay(e) {
+    e.preventDefault();
+    await api.post('/debts/' + paying.id + '/pay', { ...payForm, amount: Number(payForm.amount) || 0 });
+    setPaying(null);
+    load();
+  }
+  const open = rows.filter(r => !r.paid);
+  const paid = rows.filter(r => r.paid);
+  return (
+    <div>
+      <div className="page-header"><div><h1>Dívidas</h1><div className="subtitle">Valores pendentes e pagamentos vinculados</div></div></div>
+      <form className="glass form-grid debt-form" onSubmit={save}>
+        <input className="input" type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} />
+        <input className="input" type="date" value={form.due_date} onChange={e => setForm({ ...form, due_date: e.target.value })} />
+        <input className="input" placeholder="Credor" value={form.creditor} onChange={e => setForm({ ...form, creditor: e.target.value })} />
+        <input className="input" placeholder="Descrição" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
+        <select className="select" value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}><option value="">Tag</option>{categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}</select>
+        <select className="select" value={form.group} onChange={e => setForm({ ...form, group: e.target.value })}><option value="">Grupo</option>{groups.map(g => <option key={g.id} value={g.name}>{g.name}</option>)}</select>
+        <select className="select" value={form.account} onChange={e => setForm({ ...form, account: e.target.value })}><option value="">Conta prevista</option>{accounts.map(a => <option key={a.id} value={a.name}>{a.name}</option>)}</select>
+        <input className="input" placeholder="Valor" type="number" step="0.01" value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} />
+        <button className="btn accent">{editing ? 'Atualizar' : 'Salvar dívida'}</button>
+        {editing && <button type="button" className="btn ghost" onClick={() => { setEditing(null); setForm({ date: today(), due_date: '', creditor: '', description: '', category: '', group: '', account: '', amount: '' }); }}>Cancelar</button>}
+      </form>
+      <DebtTable title="Em aberto" rows={open} onEdit={edit} onDelete={del} onPay={openPay} />
+      <DebtTable title="Pagas" rows={paid} onEdit={edit} onDelete={del} />
+      {paying && (
+        <div className="modal-backdrop" onClick={() => setPaying(null)}>
+          <form className="modal" onSubmit={pay} onClick={e => e.stopPropagation()}>
+            <div className="modal-header"><h2>Pagar dívida</h2><button type="button" className="modal-close" onClick={() => setPaying(null)}>×</button></div>
+            <div className="field"><label className="label">Data pagamento</label><input className="input" type="date" value={payForm.date} onChange={e => setPayForm({ ...payForm, date: e.target.value })} /></div>
+            <div className="field"><label className="label">Conta/cartão</label><select className="select" value={payForm.account} onChange={e => setPayForm({ ...payForm, account: e.target.value })}><option value="">Conta</option>{accounts.map(a => <option key={a.id} value={a.name}>{a.name}</option>)}</select></div>
+            <div className="field"><label className="label">Valor</label><input className="input" type="number" step="0.01" value={payForm.amount} onChange={e => setPayForm({ ...payForm, amount: e.target.value })} /></div>
+            <div className="modal-actions"><button className="btn ghost" type="button" onClick={() => setPaying(null)}>Cancelar</button><button className="btn accent">Confirmar</button></div>
+          </form>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function DebtTable({ title, rows, onEdit, onDelete, onPay }) {
+  return (
+    <section className="glass table-panel mb-2">
+      <div className="table-title">{title}</div>
+      <table><thead><tr><th>Data</th><th>Vencimento</th><th>Credor</th><th>Descrição</th><th>Grupo</th><th>Conta</th><th>Valor</th><th></th></tr></thead>
+      <tbody>{rows.map(r => <tr key={r.id}><td>{brDate(r.date)}</td><td>{brDate(r.due_date)}</td><td>{r.creditor}</td><td>{r.description}</td><td>{r.group}</td><td>{r.account}</td><td>{money(r.amount)}</td><td><div className="table-actions">{onPay && <button className="btn sm accent" onClick={() => onPay(r)}>Pagar</button>}<button className="btn sm" onClick={() => onEdit(r)}>Editar</button><button className="btn sm danger" onClick={() => onDelete(r)}>×</button></div></td></tr>)}</tbody></table>
+    </section>
   );
 }
 
