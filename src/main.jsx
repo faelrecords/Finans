@@ -22,6 +22,7 @@ const METRICS = [
 ];
 const GROUPS = [
   { v: 'category', label: 'Categoria' },
+  { v: 'group', label: 'Grupo' },
   { v: 'account', label: 'Cartão/Conta' },
   { v: 'month', label: 'Mês' },
   { v: 'type', label: 'Tipo' }
@@ -46,6 +47,7 @@ function metricValue(row, metric) {
 
 function groupName(row, groupBy) {
   if (groupBy === 'category') return row.category || 'Sem categoria';
+  if (groupBy === 'group') return row.group || 'Sem grupo';
   if (groupBy === 'account') return row.account || 'Sem cartão/conta';
   if (groupBy === 'month') return monthKey(row.date);
   if (groupBy === 'type') return row.type === 'income' ? 'Entrada' : 'Saída';
@@ -291,17 +293,31 @@ function WidgetEditor({ initial, onClose, onSave }) {
 
 function Transactions() {
   const [rows, setRows] = useState([]);
-  const [form, setForm] = useState({ date: today(), type: 'expense', description: '', category: '', account: '', amount: '' });
-  async function load() { setRows(await api.get('/transactions')); }
+  const [groups, setGroups] = useState([]);
+  const [groupFilter, setGroupFilter] = useState('');
+  const [groupForm, setGroupForm] = useState({ name: '', color: COLORS[0] });
+  const [form, setForm] = useState({ date: today(), type: 'expense', description: '', category: '', group: '', account: '', amount: '' });
+  async function load() {
+    const [tx, gs] = await Promise.all([api.get('/transactions'), api.get('/groups')]);
+    setRows(tx);
+    setGroups(gs);
+  }
   useEffect(() => { load(); }, []);
+  const visibleRows = groupFilter ? rows.filter(r => r.group === groupFilter) : rows;
   async function save(e) {
     e.preventDefault();
     await api.post('/transactions', { ...form, amount: Number(form.amount) || 0 });
-    setForm({ date: today(), type: 'expense', description: '', category: '', account: '', amount: '' });
+    setForm({ date: today(), type: 'expense', description: '', category: '', group: '', account: '', amount: '' });
+    load();
+  }
+  async function addGroup(e) {
+    e.preventDefault();
+    await api.post('/groups', groupForm);
+    setGroupForm({ name: '', color: COLORS[0] });
     load();
   }
   async function exportXLS() {
-    const ws = XLSX.utils.json_to_sheet(rows.map(r => ({ Data: r.date, Tipo: r.type, Descrição: r.description, Categoria: r.category, 'Cartão/Conta': r.account, Valor: r.amount })));
+    const ws = XLSX.utils.json_to_sheet(visibleRows.map(r => ({ Data: r.date, Tipo: r.type, Descrição: r.description, Categoria: r.category, Grupo: r.group, 'Cartão/Conta': r.account, Valor: r.amount })));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Transações');
     XLSX.writeFile(wb, 'finans_transacoes.xlsx');
@@ -309,18 +325,31 @@ function Transactions() {
   return (
     <div>
       <div className="page-header"><div><h1>Transações</h1><div className="subtitle">Entradas, saídas, cartões, contas e categorias</div></div><button className="btn" onClick={exportXLS}>↓ Excel</button></div>
+      <section className="glass mb-2">
+        <div className="label mb-2">Grupos</div>
+        <div className="row-flex mb-2">
+          <button className={`range-pill ${!groupFilter ? 'active' : ''}`} onClick={() => setGroupFilter('')}>Todos</button>
+          {groups.map(g => <button key={g.id} className={`range-pill ${groupFilter === g.name ? 'active' : ''}`} onClick={() => setGroupFilter(g.name)}><span className="dot" style={{ background: g.color }} />{g.name}</button>)}
+        </div>
+        <form className="row-flex" onSubmit={addGroup}>
+          <input className="input compact" placeholder="Novo grupo" value={groupForm.name} onChange={e => setGroupForm({ ...groupForm, name: e.target.value })} />
+          <div className="color-picker">{COLORS.map(c => <button type="button" key={c} className={`color-dot ${groupForm.color === c ? 'selected' : ''}`} style={{ background: c }} onClick={() => setGroupForm({ ...groupForm, color: c })} />)}</div>
+          <button className="btn accent">+ Grupo</button>
+        </form>
+      </section>
       <form className="glass form-grid" onSubmit={save}>
         <input className="input" type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} />
         <select className="select" value={form.type} onChange={e => setForm({ ...form, type: e.target.value })}><option value="expense">Saída</option><option value="income">Entrada</option></select>
         <input className="input" placeholder="Descrição" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
         <input className="input" placeholder="Categoria" value={form.category} onChange={e => setForm({ ...form, category: e.target.value })} />
+        <select className="select" value={form.group} onChange={e => setForm({ ...form, group: e.target.value })}><option value="">Grupo</option>{groups.map(g => <option key={g.id} value={g.name}>{g.name}</option>)}</select>
         <input className="input" placeholder="Cartão/Conta" value={form.account} onChange={e => setForm({ ...form, account: e.target.value })} />
         <input className="input" placeholder="Valor" type="number" step="0.01" value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} />
         <button className="btn accent">Salvar</button>
       </form>
       <section className="glass table-panel">
-        <table><thead><tr><th>Data</th><th>Tipo</th><th>Descrição</th><th>Categoria</th><th>Cartão/Conta</th><th>Valor</th><th></th></tr></thead>
-        <tbody>{rows.map(r => <tr key={r.id}><td>{brDate(r.date)}</td><td>{r.type === 'income' ? 'Entrada' : 'Saída'}</td><td>{r.description}</td><td>{r.category}</td><td>{r.account}</td><td>{money(r.amount)}</td><td><button className="btn sm danger" onClick={async () => { await api.del('/transactions/' + r.id); load(); }}>×</button></td></tr>)}</tbody></table>
+        <table><thead><tr><th>Data</th><th>Tipo</th><th>Descrição</th><th>Categoria</th><th>Grupo</th><th>Cartão/Conta</th><th>Valor</th><th></th></tr></thead>
+        <tbody>{visibleRows.map(r => <tr key={r.id}><td>{brDate(r.date)}</td><td>{r.type === 'income' ? 'Entrada' : 'Saída'}</td><td>{r.description}</td><td>{r.category}</td><td>{r.group}</td><td>{r.account}</td><td>{money(r.amount)}</td><td><button className="btn sm danger" onClick={async () => { await api.del('/transactions/' + r.id); load(); }}>×</button></td></tr>)}</tbody></table>
       </section>
     </div>
   );
