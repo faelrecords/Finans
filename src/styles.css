@@ -1,0 +1,42 @@
+:root {
+  --bg: #090b0d;
+  --panel: #171a1d;
+  --line: rgba(255,255,255,.09);
+  --text: #f1f2ee;
+  --muted: #9da3a6;
+  --accent: #65d6ad;
+  font-family: Inter, system-ui, sans-serif;
+  color: var(--text);
+  background: var(--bg);
+}
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; background: radial-gradient(circle at 10% 0%, rgba(101,214,173,.14), transparent 30%), var(--bg); }
+button, input, select { font: inherit; color: inherit; }
+button { border: 1px solid var(--line); border-radius: 999px; background: rgba(255,255,255,.06); padding: 10px 16px; cursor: pointer; font-weight: 700; }
+button:hover, button.active { background: rgba(101,214,173,.18); border-color: rgba(101,214,173,.4); }
+input, select { width: 100%; border: 1px solid var(--line); border-radius: 10px; background: #101315; padding: 12px; outline: none; }
+nav { display: flex; align-items: center; gap: 8px; padding: 18px 28px; border-bottom: 1px solid var(--line); background: rgba(20,22,24,.82); position: sticky; top: 0; z-index: 10; }
+.brand { font-size: 44px; font-weight: 900; letter-spacing: -.04em; }
+.brand.small { font-size: 24px; margin-right: 16px; }
+.spacer { flex: 1; }
+.wrap { max-width: 1360px; margin: 0 auto; padding: 28px; }
+.panel { background: rgba(23,26,29,.9); border: 1px solid var(--line); border-radius: 18px; padding: 22px; box-shadow: 0 18px 50px rgba(0,0,0,.28); }
+.login { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
+.login-card { width: min(420px, 100%); display: grid; gap: 12px; }
+.error { color: #ff817a; font-size: 13px; }
+.cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 14px; }
+.cards label { display: block; color: var(--muted); font-size: 12px; text-transform: uppercase; margin-bottom: 8px; }
+.cards strong { font-size: 28px; }
+.chart h2 { margin: 0 0 16px; }
+.form-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
+.table-panel { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; }
+th, td { text-align: left; padding: 13px; border-bottom: 1px solid var(--line); }
+th { color: var(--muted); font-size: 12px; text-transform: uppercase; }
+.row { display: flex; gap: 10px; margin-bottom: 16px; }
+.pill { display: inline-flex; padding: 7px 12px; margin: 0 8px 8px 0; border-radius: 999px; border: 1px solid var(--line); color: var(--accent); }
+@media (max-width: 900px) {
+  .cards, .form-grid { grid-template-columns: 1fr; }
+  nav { flex-wrap: wrap; }
+}
+
