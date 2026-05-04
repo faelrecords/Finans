@@ -136,13 +136,18 @@ function App() {
 function Dashboard({ readOnly = false }) {
   const [rows, setRows] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [groups, setGroups] = useState([]);
   const [dashboards, setDashboards] = useState([]);
   const [active, setActive] = useState(null);
   const [widgets, setWidgets] = useState([]);
   const [editing, setEditing] = useState(null);
   const [showWidget, setShowWidget] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [filters, setFilters] = useState({ from: '', to: '', type: '', category: '', group: '', account: '' });
   const month = today().slice(0, 7);
-  const monthRows = rows.filter(r => monthKey(r.date) === month);
+  const filteredRows = useMemo(() => filterRows(rows, filters), [rows, filters]);
+  const monthRows = filteredRows.filter(r => monthKey(r.date) === month);
+  const accounts = useMemo(() => uniqueOptions(rows, 'account'), [rows]);
 
   async function loadDashboards() {
     const list = await api.get('/dashboards');
@@ -153,21 +158,23 @@ function Dashboard({ readOnly = false }) {
   async function load() {
     const list = dashboards.length ? dashboards : await loadDashboards();
     const dash = active || list[0];
-    const [tx, ws, cats] = await Promise.all([
+    const [tx, ws, cats, gs] = await Promise.all([
       api.get('/transactions'),
       dash ? api.get(`/widgets?dashboard_id=${dash.id}`) : [],
-      api.get('/categories')
+      api.get('/categories'),
+      api.get('/groups')
     ]);
     setRows(tx);
     setWidgets(ws);
     setCategories(cats);
+    setGroups(gs);
   }
   useEffect(() => { loadDashboards(); }, []);
   useEffect(() => { if (active) load(); }, [active?.id]);
 
   const income = aggregate(monthRows, 'income');
   const expense = aggregate(monthRows, 'expense');
-  const balance = aggregate(rows, 'balance');
+  const balance = aggregate(filteredRows, 'balance');
 
   async function createDashboard() {
     const title = prompt('Nome da dashboard?') || 'Nova dashboard';
@@ -207,6 +214,7 @@ function Dashboard({ readOnly = false }) {
       <div className="page-header">
         <div><h1>{active?.title || 'Dashboards'}</h1><div className="subtitle">Resumo financeiro e gráficos personalizáveis</div></div>
         <div className="row-flex">
+          <button className="btn" onClick={() => setFiltersOpen(true)}>Filtros</button>
           {!readOnly && <button className="btn" onClick={renameDashboard} disabled={!active}>Renomear</button>}
           {!readOnly && <button className="btn danger" onClick={deleteDashboard} disabled={dashboards.length <= 1}>Excluir página</button>}
           {!readOnly && <button className="btn accent" onClick={() => setShowWidget(true)}>+ Widget</button>}
@@ -226,9 +234,10 @@ function Dashboard({ readOnly = false }) {
         <div className="glass empty-state"><h3>Nenhum widget ainda</h3>{!readOnly && <button className="btn accent mt-2" onClick={() => setShowWidget(true)}>+ Criar widget</button>}</div>
       ) : (
         <div className="widgets-grid">
-          {widgets.map(w => <WidgetCard key={w.id} widget={w} rows={rows} categories={categories} onEdit={readOnly ? null : () => setEditing(w)} onDelete={readOnly ? null : () => deleteWidget(w.id)} />)}
+          {widgets.map(w => <WidgetCard key={w.id} widget={w} rows={filteredRows} categories={categories} onEdit={readOnly ? null : () => setEditing(w)} onDelete={readOnly ? null : () => deleteWidget(w.id)} />)}
         </div>
       )}
+      {filtersOpen && <FilterDrawer filters={filters} setFilters={setFilters} categories={categories} groups={groups} accounts={accounts} onClose={() => setFiltersOpen(false)} />}
       {(showWidget || editing) && <WidgetEditor initial={editing} onClose={() => { setEditing(null); setShowWidget(false); }} onSave={saveWidget} />}
     </div>
   );
@@ -302,23 +311,49 @@ function Transactions() {
   const [groupFilter, setGroupFilter] = useState('');
   const [groupForm, setGroupForm] = useState({ name: '', color: COLORS[0] });
   const [form, setForm] = useState({ date: today(), type: 'expense', description: '', category: '', group: '', account: '', amount: '' });
+  const [editing, setEditing] = useState(null);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [filters, setFilters] = useState({ from: '', to: '', type: '', category: '', group: '', account: '' });
   async function load() {
     const [tx, gs] = await Promise.all([api.get('/transactions'), api.get('/groups')]);
     setRows(tx);
     setGroups(gs);
   }
   useEffect(() => { load(); }, []);
-  const visibleRows = groupFilter ? rows.filter(r => r.group === groupFilter) : rows;
+  const categories = useMemo(() => uniqueOptions(rows, 'category').map(name => ({ name })), [rows]);
+  const accounts = useMemo(() => uniqueOptions(rows, 'account'), [rows]);
+  const visibleRows = useMemo(() => filterRows(groupFilter ? rows.filter(r => r.group === groupFilter) : rows, filters), [rows, groupFilter, filters]);
   async function save(e) {
     e.preventDefault();
-    await api.post('/transactions', { ...form, amount: Number(form.amount) || 0 });
+    const payload = { ...form, amount: Number(form.amount) || 0 };
+    if (editing) await api.put('/transactions/' + editing.id, payload);
+    else await api.post('/transactions', payload);
+    setEditing(null);
     setForm({ date: today(), type: 'expense', description: '', category: '', group: '', account: '', amount: '' });
+    load();
+  }
+  function editRow(r) {
+    setEditing(r);
+    setForm({ date: r.date, type: r.type, description: r.description, category: r.category, group: r.group || '', account: r.account, amount: r.amount });
+  }
+  async function delRow(r) {
+    if (!confirm('Excluir transação?')) return;
+    await api.del('/transactions/' + r.id);
     load();
   }
   async function addGroup(e) {
     e.preventDefault();
     await api.post('/groups', groupForm);
     setGroupForm({ name: '', color: COLORS[0] });
+    load();
+  }
+  async function updateGroup(g, color) {
+    await api.put('/groups/' + g.id, { ...g, color });
+    load();
+  }
+  async function deleteGroup(g) {
+    if (!confirm('Excluir grupo?')) return;
+    await api.del('/groups/' + g.id);
     load();
   }
   async function exportXLS() {
@@ -329,7 +364,7 @@ function Transactions() {
   }
   return (
     <div>
-      <div className="page-header"><div><h1>Transações</h1><div className="subtitle">Entradas, saídas, cartões, contas e categorias</div></div><button className="btn" onClick={exportXLS}>↓ Excel</button></div>
+      <div className="page-header"><div><h1>Transações</h1><div className="subtitle">Entradas, saídas, cartões, contas e categorias</div></div><div className="row-flex"><button className="btn" onClick={() => setFiltersOpen(true)}>Filtros</button><button className="btn" onClick={exportXLS}>↓ Excel</button></div></div>
       <section className="glass mb-2">
         <div className="label mb-2">Grupos</div>
         <div className="row-flex mb-2">
@@ -338,9 +373,12 @@ function Transactions() {
         </div>
         <form className="row-flex" onSubmit={addGroup}>
           <input className="input compact" placeholder="Novo grupo" value={groupForm.name} onChange={e => setGroupForm({ ...groupForm, name: e.target.value })} />
-          <div className="color-picker">{COLORS.map(c => <button type="button" key={c} className={`color-dot ${groupForm.color === c ? 'selected' : ''}`} style={{ background: c }} onClick={() => setGroupForm({ ...groupForm, color: c })} />)}</div>
+          <input className="color-input" type="color" value={groupForm.color} onChange={e => setGroupForm({ ...groupForm, color: e.target.value })} />
           <button className="btn accent">+ Grupo</button>
         </form>
+        <div className="group-list">
+          {groups.map(g => <div className="group-row" key={g.id}><span className="badge"><span className="dot" style={{ background: g.color }} />{g.name}</span><input className="color-input" type="color" value={g.color} onChange={e => updateGroup(g, e.target.value)} /><button className="btn sm danger" onClick={() => deleteGroup(g)}>×</button></div>)}
+        </div>
       </section>
       <form className="glass form-grid" onSubmit={save}>
         <input className="input" type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} />
@@ -350,12 +388,14 @@ function Transactions() {
         <select className="select" value={form.group} onChange={e => setForm({ ...form, group: e.target.value })}><option value="">Grupo</option>{groups.map(g => <option key={g.id} value={g.name}>{g.name}</option>)}</select>
         <input className="input" placeholder="Cartão/Conta" value={form.account} onChange={e => setForm({ ...form, account: e.target.value })} />
         <input className="input" placeholder="Valor" type="number" step="0.01" value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} />
-        <button className="btn accent">Salvar</button>
+        <button className="btn accent">{editing ? 'Atualizar' : 'Salvar'}</button>
+        {editing && <button type="button" className="btn ghost" onClick={() => { setEditing(null); setForm({ date: today(), type: 'expense', description: '', category: '', group: '', account: '', amount: '' }); }}>Cancelar</button>}
       </form>
       <section className="glass table-panel">
         <table><thead><tr><th>Data</th><th>Tipo</th><th>Descrição</th><th>Categoria</th><th>Grupo</th><th>Cartão/Conta</th><th>Valor</th><th></th></tr></thead>
-        <tbody>{visibleRows.map(r => <tr key={r.id}><td>{brDate(r.date)}</td><td>{r.type === 'income' ? 'Entrada' : 'Saída'}</td><td>{r.description}</td><td>{r.category}</td><td>{r.group}</td><td>{r.account}</td><td>{money(r.amount)}</td><td><button className="btn sm danger" onClick={async () => { await api.del('/transactions/' + r.id); load(); }}>×</button></td></tr>)}</tbody></table>
+        <tbody>{visibleRows.map(r => <tr key={r.id}><td>{brDate(r.date)}</td><td>{r.type === 'income' ? 'Entrada' : 'Saída'}</td><td>{r.description}</td><td>{r.category}</td><td>{r.group}</td><td>{r.account}</td><td>{money(r.amount)}</td><td><div className="table-actions"><button className="btn sm" onClick={() => editRow(r)}>Editar</button><button className="btn sm danger" onClick={() => delRow(r)}>×</button></div></td></tr>)}</tbody></table>
       </section>
+      {filtersOpen && <FilterDrawer filters={filters} setFilters={setFilters} categories={categories} groups={groups} accounts={accounts} onClose={() => setFiltersOpen(false)} />}
     </div>
   );
 }
@@ -405,12 +445,24 @@ function Categories() {
 function Users() {
   const [rows, setRows] = useState([]);
   const [form, setForm] = useState({ name: '', code: '', password: '', role: 'user' });
+  const [editing, setEditing] = useState(null);
   async function load() { setRows(await api.get('/users')); }
   useEffect(() => { load(); }, []);
   async function save(e) {
     e.preventDefault();
-    await api.post('/users', form);
+    if (editing) await api.put('/users/' + editing.id, form);
+    else await api.post('/users', form);
+    setEditing(null);
     setForm({ name: '', code: '', password: '', role: 'user' });
+    load();
+  }
+  function editUser(u) {
+    setEditing(u);
+    setForm({ name: u.name, code: u.code, password: '', role: u.role });
+  }
+  async function deleteUser(u) {
+    if (!confirm('Excluir usuário?')) return;
+    await api.del('/users/' + u.id);
     load();
   }
   return (
@@ -421,11 +473,51 @@ function Users() {
         <input className="input" placeholder="Código" value={form.code} onChange={e => setForm({ ...form, code: e.target.value })} />
         <input className="input" placeholder="Senha" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} />
         <select className="select" value={form.role} onChange={e => setForm({ ...form, role: e.target.value })}><option value="user">Somente dashboard</option><option value="admin">Admin</option></select>
-        <button className="btn accent">Criar usuário</button>
+        <button className="btn accent">{editing ? 'Atualizar' : 'Criar usuário'}</button>
+        {editing && <button type="button" className="btn ghost" onClick={() => { setEditing(null); setForm({ name: '', code: '', password: '', role: 'user' }); }}>Cancelar</button>}
       </form>
       <section className="glass table-panel">
-        <table><thead><tr><th>Nome</th><th>Código</th><th>Perfil</th></tr></thead><tbody>{rows.map(u => <tr key={u.id}><td>{u.name}</td><td>{u.code}</td><td>{u.role === 'user' ? 'Somente dashboard' : u.role}</td></tr>)}</tbody></table>
+        <table><thead><tr><th>Nome</th><th>Código</th><th>Perfil</th><th></th></tr></thead><tbody>{rows.map(u => <tr key={u.id}><td>{u.name}</td><td>{u.code}</td><td>{u.role === 'user' ? 'Somente dashboard' : u.role}</td><td><div className="table-actions"><button className="btn sm" onClick={() => editUser(u)}>Editar</button><button className="btn sm danger" onClick={() => deleteUser(u)}>×</button></div></td></tr>)}</tbody></table>
       </section>
+    </div>
+  );
+}
+
+function uniqueOptions(rows, key) {
+  return [...new Set(rows.map(r => r[key]).filter(Boolean))];
+}
+
+function filterRows(rows, filters) {
+  return rows.filter(r => {
+    if (filters.from && r.date < filters.from) return false;
+    if (filters.to && r.date > filters.to) return false;
+    if (filters.type && r.type !== filters.type) return false;
+    if (filters.category && r.category !== filters.category) return false;
+    if (filters.group && r.group !== filters.group) return false;
+    if (filters.account && r.account !== filters.account) return false;
+    return true;
+  });
+}
+
+function FilterDrawer({ filters, setFilters, categories, groups, accounts, onClose }) {
+  const set = (k, v) => setFilters({ ...filters, [k]: v });
+  const clear = () => setFilters({ from: '', to: '', type: '', category: '', group: '', account: '' });
+  return (
+    <div className="drawer-backdrop" onClick={onClose}>
+      <aside className="filter-drawer" onClick={e => e.stopPropagation()}>
+        <div className="drawer-head"><h2>Filtros</h2><button className="modal-close" onClick={onClose}>×</button></div>
+        <div className="drawer-section">
+          <div className="grid-2">
+            <div className="field"><label className="label">De</label><input className="input" type="date" value={filters.from} onChange={e => set('from', e.target.value)} /></div>
+            <div className="field"><label className="label">Até</label><input className="input" type="date" value={filters.to} onChange={e => set('to', e.target.value)} /></div>
+          </div>
+          <div className="field"><label className="label">Tipo</label><select className="select" value={filters.type} onChange={e => set('type', e.target.value)}><option value="">Todos</option><option value="expense">Saídas</option><option value="income">Entradas</option></select></div>
+          <div className="field"><label className="label">Categoria</label><select className="select" value={filters.category} onChange={e => set('category', e.target.value)}><option value="">Todas</option>{categories.map(c => <option key={c.name} value={c.name}>{c.name}</option>)}</select></div>
+          <div className="field"><label className="label">Grupo</label><select className="select" value={filters.group} onChange={e => set('group', e.target.value)}><option value="">Todos</option>{groups.map(g => <option key={g.id} value={g.name}>{g.name}</option>)}</select></div>
+          <div className="field"><label className="label">Cartão/Conta</label><select className="select" value={filters.account} onChange={e => set('account', e.target.value)}><option value="">Todos</option>{accounts.map(a => <option key={a} value={a}>{a}</option>)}</select></div>
+        </div>
+        <div className="modal-actions"><button className="btn ghost" onClick={clear}>Limpar</button><button className="btn accent" onClick={onClose}>Aplicar</button></div>
+      </aside>
     </div>
   );
 }
