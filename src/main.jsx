@@ -377,15 +377,19 @@ function Transactions() {
 function Market() {
   const [rows, setRows] = useState([]);
   const [payments, setPayments] = useState([]);
+  const [groups, setGroups] = useState([]);
+  const [accounts, setAccounts] = useState([]);
   const [form, setForm] = useState({ date: today(), store: '', total: '', url: '', items: [], payments: [] });
   const [editing, setEditing] = useState(null);
   const [details, setDetails] = useState(null);
   const [scanOpen, setScanOpen] = useState(false);
   const [error, setError] = useState('');
   async function load() {
-    const [rs, ps] = await Promise.all([api.get('/receipts'), api.get('/payment-methods')]);
+    const [rs, ps, gs, accs] = await Promise.all([api.get('/receipts'), api.get('/payment-methods'), api.get('/groups'), api.get('/accounts')]);
     setRows(rs);
     setPayments(ps);
+    setGroups(gs);
+    setAccounts(accs);
   }
   useEffect(() => { load(); }, []);
   async function parseUrl(url) {
@@ -421,7 +425,7 @@ function Market() {
     setForm(f => ({ ...f, payments: f.payments.map((p, i) => i === idx ? { ...p, ...patch } : p) }));
   }
   function addPayment() {
-    setForm(f => ({ ...f, payments: [...(f.payments || []), { method: payments[0]?.name || '', amount: '' }] }));
+    setForm(f => ({ ...f, payments: [...(f.payments || []), { method: payments[0]?.name || '', amount: '', account: '', group: '' }] }));
   }
   function removePayment(idx) {
     setForm(f => ({ ...f, payments: f.payments.filter((_, i) => i !== idx) }));
@@ -445,6 +449,8 @@ function Market() {
           {(form.payments || []).map((p, idx) => (
             <div className="payment-row" key={idx}>
               <select className="select" value={p.method} onChange={e => setPayment(idx, { method: e.target.value })}>{mergeNamed(payments, [p.method]).map(x => <option key={x.name} value={x.name}>{x.name}</option>)}</select>
+              <select className="select" value={p.account || ''} onChange={e => setPayment(idx, { account: e.target.value })}><option value="">Conta/cartão</option>{mergeNamed(accounts, p.account ? [p.account] : []).map(x => <option key={x.name} value={x.name}>{x.name}</option>)}</select>
+              <select className="select" value={p.group || ''} onChange={e => setPayment(idx, { group: e.target.value })}><option value="">Grupo</option>{mergeNamed(groups, p.group ? [p.group] : []).map(x => <option key={x.name} value={x.name}>{x.name}</option>)}</select>
               <input className="input" type="number" step="0.01" value={p.amount} onChange={e => setPayment(idx, { amount: e.target.value })} />
               <button className="btn sm danger" onClick={() => removePayment(idx)}>×</button>
             </div>
@@ -515,7 +521,7 @@ function ReceiptDetails({ receipt, onClose }) {
           <div className="glass-sm"><label>Data</label><strong>{brDate(receipt.date)}</strong></div>
           <div className="glass-sm"><label>Total</label><strong>{money(receipt.total)}</strong></div>
         </div>
-        {(receipt.payments || []).length > 0 && <div className="category-list mb-2">{receipt.payments.map((p, idx) => <div className="config-row" key={idx}><span className="badge">{p.method}</span><strong>{money(p.amount)}</strong></div>)}</div>}
+        {(receipt.payments || []).length > 0 && <div className="category-list mb-2">{receipt.payments.map((p, idx) => <div className="config-row" key={idx}><span className="badge">{p.method}{p.account ? ` · ${p.account}` : ''}{p.group ? ` · ${p.group}` : ''}</span><strong>{money(p.amount)}</strong></div>)}</div>}
         <div className="table-panel">
           <table><thead><tr><th>Item</th><th>Qtd</th><th>Unit.</th><th>Total</th></tr></thead>
           <tbody>{(receipt.items || []).map((i, idx) => <tr key={idx}><td>{i.name}</td><td>{i.qty || '-'}</td><td>{i.unit ? money(i.unit) : '-'}</td><td>{money(i.total)}</td></tr>)}</tbody></table>

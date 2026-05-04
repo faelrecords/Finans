@@ -185,7 +185,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .form-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 14px; }
 .market-form { grid-template-columns: 160px 1fr 160px 1.5fr auto auto auto; }
 .payment-list { display: grid; gap: 10px; }
-.payment-row { display: grid; grid-template-columns: minmax(0, 1fr) 160px auto; gap: 10px; align-items: center; }
+.payment-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) 140px auto; gap: 10px; align-items: center; }
 .qr-video { width: 100%; aspect-ratio: 4 / 3; background: #050505; border-radius: var(--glass-radius-sm); border: 1px solid var(--border); object-fit: cover; }
 .details-summary { grid-template-columns: repeat(2, 1fr); }
 .table-panel { overflow-x: auto; padding: 0; }
