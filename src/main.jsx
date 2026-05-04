@@ -65,6 +65,10 @@ function grouped(rows, metric, groupBy) {
   return [...map.entries()].map(([name, value]) => ({ name, value }));
 }
 
+function colorForCategory(categories, name, fallback = '#6d71f0') {
+  return categories.find(c => c.name === name)?.color || fallback;
+}
+
 function Login({ onLogin }) {
   const [form, setForm] = useState({ code: '', password: '' });
   const [error, setError] = useState('');
@@ -124,6 +128,7 @@ function App() {
 
 function Dashboard() {
   const [rows, setRows] = useState([]);
+  const [categories, setCategories] = useState([]);
   const [dashboards, setDashboards] = useState([]);
   const [active, setActive] = useState(null);
   const [widgets, setWidgets] = useState([]);
@@ -141,12 +146,14 @@ function Dashboard() {
   async function load() {
     const list = dashboards.length ? dashboards : await loadDashboards();
     const dash = active || list[0];
-    const [tx, ws] = await Promise.all([
+    const [tx, ws, cats] = await Promise.all([
       api.get('/transactions'),
-      dash ? api.get(`/widgets?dashboard_id=${dash.id}`) : []
+      dash ? api.get(`/widgets?dashboard_id=${dash.id}`) : [],
+      api.get('/categories')
     ]);
     setRows(tx);
     setWidgets(ws);
+    setCategories(cats);
   }
   useEffect(() => { loadDashboards(); }, []);
   useEffect(() => { if (active) load(); }, [active?.id]);
@@ -212,7 +219,7 @@ function Dashboard() {
         <div className="glass empty-state"><h3>Nenhum widget ainda</h3><button className="btn accent mt-2" onClick={() => setShowWidget(true)}>+ Criar widget</button></div>
       ) : (
         <div className="widgets-grid">
-          {widgets.map(w => <WidgetCard key={w.id} widget={w} rows={rows} onEdit={() => setEditing(w)} onDelete={() => deleteWidget(w.id)} />)}
+          {widgets.map(w => <WidgetCard key={w.id} widget={w} rows={rows} categories={categories} onEdit={() => setEditing(w)} onDelete={() => deleteWidget(w.id)} />)}
         </div>
       )}
       {(showWidget || editing) && <WidgetEditor initial={editing} onClose={() => { setEditing(null); setShowWidget(false); }} onSave={saveWidget} />}
@@ -220,7 +227,7 @@ function Dashboard() {
   );
 }
 
-function WidgetCard({ widget, rows, onEdit, onDelete }) {
+function WidgetCard({ widget, rows, categories, onEdit, onDelete }) {
   const [hidden, setHidden] = useState(false);
   const data = useMemo(() => grouped(rows, widget.metric, widget.group_by), [rows, widget]);
   const value = aggregate(rows, widget.metric);
@@ -239,16 +246,16 @@ function WidgetCard({ widget, rows, onEdit, onDelete }) {
       {widget.chart_type === 'kpi' ? (
         <div className="widget-kpi"><div className="value">{hidden ? '••••' : formatted}</div><div className="label">{METRICS.find(m => m.v === widget.metric)?.label}</div></div>
       ) : (
-        <div className="widget-chart"><Chart type={widget.chart_type} data={data} color={widget.color} hidden={hidden} /></div>
+        <div className="widget-chart"><Chart type={widget.chart_type} data={data} color={widget.color} hidden={hidden} categories={categories} groupBy={widget.group_by} /></div>
       )}
     </div>
   );
 }
 
-function Chart({ type, data, color, hidden }) {
+function Chart({ type, data, color, hidden, categories, groupBy }) {
   const tooltip = hidden ? null : <Tooltip formatter={v => money(v)} contentStyle={{ background: '#141415', border: '1px solid rgba(255,255,255,.1)', borderRadius: 10 }} />;
   if (type === 'pie') return (
-    <ResponsiveContainer width="100%" height={220}><PieChart><Pie data={data} dataKey="value" nameKey="name" outerRadius={80} label={hidden ? false : { fill: '#acadb1' }}>{data.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}</Pie>{tooltip}</PieChart></ResponsiveContainer>
+    <ResponsiveContainer width="100%" height={220}><PieChart><Pie data={data} dataKey="value" nameKey="name" outerRadius={80} label={hidden ? false : { fill: '#acadb1' }}>{data.map((d, i) => <Cell key={i} fill={groupBy === 'category' ? colorForCategory(categories, d.name, COLORS[i % COLORS.length]) : COLORS[i % COLORS.length]} />)}</Pie>{tooltip}</PieChart></ResponsiveContainer>
   );
   if (type === 'line') return (
     <ResponsiveContainer width="100%" height={220}><LineChart data={data}><CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,.06)" /><XAxis dataKey="name" stroke="#acadb1" /><YAxis tick={hidden ? false : { fill: '#acadb1' }} stroke="#acadb1" />{tooltip}<Line dataKey="value" stroke={color} strokeWidth={2} /></LineChart></ResponsiveContainer>
@@ -257,7 +264,7 @@ function Chart({ type, data, color, hidden }) {
     <ResponsiveContainer width="100%" height={220}><AreaChart data={data}><CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,.06)" /><XAxis dataKey="name" stroke="#acadb1" /><YAxis tick={hidden ? false : { fill: '#acadb1' }} stroke="#acadb1" />{tooltip}<Area dataKey="value" stroke={color} fill={color} fillOpacity={0.25} /></AreaChart></ResponsiveContainer>
   );
   return (
-    <ResponsiveContainer width="100%" height={220}><BarChart data={data}><CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,.06)" /><XAxis dataKey="name" stroke="#acadb1" /><YAxis tick={hidden ? false : { fill: '#acadb1' }} stroke="#acadb1" />{tooltip}<Bar dataKey="value" fill={color} radius={[6, 6, 0, 0]} minPointSize={1} /></BarChart></ResponsiveContainer>
+    <ResponsiveContainer width="100%" height={220}><BarChart data={data}><CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,.06)" /><XAxis dataKey="name" stroke="#acadb1" /><YAxis tick={hidden ? false : { fill: '#acadb1' }} stroke="#acadb1" />{tooltip}<Bar dataKey="value" fill={color} radius={[6, 6, 0, 0]} minPointSize={1}>{data.map((d, i) => <Cell key={i} fill={groupBy === 'category' ? colorForCategory(categories, d.name, color) : color} />)}</Bar></BarChart></ResponsiveContainer>
   );
 }
 
@@ -321,18 +328,42 @@ function Transactions() {
 
 function Categories() {
   const [rows, setRows] = useState([]);
-  const [name, setName] = useState('');
+  const [form, setForm] = useState({ name: '', color: COLORS[0] });
   async function load() { setRows(await api.get('/categories')); }
   useEffect(() => { load(); }, []);
   async function add(e) {
     e.preventDefault();
-    await api.post('/categories', { name });
-    setName('');
+    await api.post('/categories', form);
+    setForm({ name: '', color: COLORS[0] });
+    load();
+  }
+  async function setColor(c, color) {
+    await api.put('/categories/' + c.id, { ...c, color });
+    load();
+  }
+  async function del(c) {
+    if (!confirm('Excluir categoria?')) return;
+    await api.del('/categories/' + c.id);
     load();
   }
   return (
     <div><div className="page-header"><div><h1>Categorias</h1><div className="subtitle">Classificação de entradas e saídas</div></div></div>
-      <section className="glass"><form className="row-flex mb-2" onSubmit={add}><input className="input" placeholder="Categoria" value={name} onChange={e => setName(e.target.value)} /><button className="btn accent">Adicionar</button></form>{rows.map(c => <span className="badge" key={c.id}>{c.name}</span>)}</section>
+      <section className="glass">
+        <form className="row-flex mb-2" onSubmit={add}>
+          <input className="input" placeholder="Categoria" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
+          <div className="color-picker">{COLORS.map(c => <button type="button" key={c} className={`color-dot ${form.color === c ? 'selected' : ''}`} style={{ background: c }} onClick={() => setForm({ ...form, color: c })} />)}</div>
+          <button className="btn accent">Adicionar</button>
+        </form>
+        <div className="category-list">
+          {rows.map(c => (
+            <div className="category-row" key={c.id}>
+              <span className="badge"><span className="dot" style={{ background: c.color }} />{c.name}</span>
+              <div className="color-picker small">{COLORS.map(color => <button type="button" key={color} className={`color-dot ${c.color === color ? 'selected' : ''}`} style={{ background: color }} onClick={() => setColor(c, color)} />)}</div>
+              <button className="btn sm danger" onClick={() => del(c)}>×</button>
+            </div>
+          ))}
+        </div>
+      </section>
     </div>
   );
 }
