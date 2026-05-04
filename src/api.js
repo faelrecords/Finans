@@ -1,4 +1,4 @@
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:54321/functions/v1/api';
+const API_URL = import.meta.env.VITE_API_URL || 'https://wblsxsidbjnrvgywjvim.supabase.co/functions/v1/api';
 
 export const api = {
   token: localStorage.getItem('finans_token'),
@@ -29,4 +29,5 @@ export const api = {
   put(path, body) { return this.req(path, { method: 'PUT', body: JSON.stringify(body) }); },
   del(path) { return this.req(path, { method: 'DELETE' }); }
 };
+
 
