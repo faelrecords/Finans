@@ -118,6 +118,7 @@ function App() {
           ] : [
             ['dashboard', 'Dashboards'],
             ['transacoes', 'Transações'],
+            ['mercado', 'Mercado'],
             ['config', 'Configurações'],
             ['usuarios', 'Usuários']
           ]).map(([key, label]) => <button key={key} className={`nav-link ${tab === key ? 'active' : ''}`} onClick={() => setTab(key)}>{label}</button>)}
@@ -127,6 +128,7 @@ function App() {
       <main className="container">
         {tab === 'dashboard' && <Dashboard readOnly={readOnly} />}
         {!readOnly && tab === 'transacoes' && <Transactions />}
+        {!readOnly && tab === 'mercado' && <Market />}
         {!readOnly && tab === 'config' && <Settings />}
         {!readOnly && tab === 'usuarios' && <Users />}
       </main>
@@ -368,6 +370,130 @@ function Transactions() {
         <tbody>{visibleRows.map(r => <tr key={r.id}><td>{brDate(r.date)}</td><td>{r.type === 'income' ? 'Entrada' : 'Saída'}</td><td>{r.description}</td><td>{r.category}</td><td>{r.group}</td><td>{r.account}</td><td>{money(r.amount)}</td><td><div className="table-actions"><button className="btn sm" onClick={() => editRow(r)}>Editar</button><button className="btn sm danger" onClick={() => delRow(r)}>×</button></div></td></tr>)}</tbody></table>
       </section>
       {filtersOpen && <FilterDrawer filters={filters} setFilters={setFilters} categories={categoryOptions} groups={groups} accounts={accountOptions.map(a => a.name)} onClose={() => setFiltersOpen(false)} />}
+    </div>
+  );
+}
+
+function Market() {
+  const [rows, setRows] = useState([]);
+  const [form, setForm] = useState({ date: today(), store: '', total: '', url: '', items: [] });
+  const [editing, setEditing] = useState(null);
+  const [details, setDetails] = useState(null);
+  const [scanOpen, setScanOpen] = useState(false);
+  const [error, setError] = useState('');
+  async function load() { setRows(await api.get('/receipts')); }
+  useEffect(() => { load(); }, []);
+  async function parseUrl(url) {
+    setError('');
+    try {
+      const data = await api.post('/receipts/parse', { url });
+      setForm({ date: data.date || today(), store: data.store || '', total: data.total || '', url, items: data.items || [] });
+      setScanOpen(false);
+    } catch (err) {
+      setError(err.message);
+      setForm(f => ({ ...f, url }));
+    }
+  }
+  async function save(e) {
+    e.preventDefault();
+    const payload = { ...form, total: Number(form.total) || 0 };
+    if (editing) await api.put('/receipts/' + editing.id, payload);
+    else await api.post('/receipts', payload);
+    setEditing(null);
+    setForm({ date: today(), store: '', total: '', url: '', items: [] });
+    load();
+  }
+  function edit(row) {
+    setEditing(row);
+    setForm({ date: row.date, store: row.store, total: row.total, url: row.url || '', items: row.items || [] });
+  }
+  async function del(row) {
+    if (!confirm('Excluir compra?')) return;
+    await api.del('/receipts/' + row.id);
+    load();
+  }
+  return (
+    <div>
+      <div className="page-header"><div><h1>Mercado</h1><div className="subtitle">Compras por NFC-e, mercado e itens</div></div><button className="btn accent" onClick={() => setScanOpen(true)}>Ler QR</button></div>
+      {error && <div className="error-msg mb-2">{error}</div>}
+      <form className="glass form-grid market-form" onSubmit={save}>
+        <input className="input" type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} />
+        <input className="input" placeholder="Mercado" value={form.store} onChange={e => setForm({ ...form, store: e.target.value })} />
+        <input className="input" placeholder="Valor total" type="number" step="0.01" value={form.total} onChange={e => setForm({ ...form, total: e.target.value })} />
+        <input className="input" placeholder="URL NFC-e" value={form.url} onChange={e => setForm({ ...form, url: e.target.value })} />
+        <button type="button" className="btn" onClick={() => parseUrl(form.url)}>Buscar nota</button>
+        <button className="btn accent">{editing ? 'Atualizar' : 'Salvar compra'}</button>
+        {editing && <button type="button" className="btn ghost" onClick={() => { setEditing(null); setForm({ date: today(), store: '', total: '', url: '', items: [] }); }}>Cancelar</button>}
+      </form>
+      <section className="glass table-panel">
+        <table><thead><tr><th>Data</th><th>Mercado</th><th>Valor</th><th>Itens</th><th></th></tr></thead>
+        <tbody>{rows.map(r => <tr key={r.id}><td>{brDate(r.date)}</td><td>{r.store}</td><td>{money(r.total)}</td><td>{r.items?.length || 0}</td><td><div className="table-actions"><button className="btn sm" onClick={() => setDetails(r)}>Detalhes</button><button className="btn sm" onClick={() => edit(r)}>Editar</button><button className="btn sm danger" onClick={() => del(r)}>×</button></div></td></tr>)}</tbody></table>
+      </section>
+      {scanOpen && <QrScanner onClose={() => setScanOpen(false)} onResult={parseUrl} />}
+      {details && <ReceiptDetails receipt={details} onClose={() => setDetails(null)} />}
+    </div>
+  );
+}
+
+function QrScanner({ onClose, onResult }) {
+  const videoRef = React.useRef(null);
+  const [msg, setMsg] = useState('Aponte para QR Code');
+  useEffect(() => {
+    let stream;
+    let timer;
+    async function start() {
+      try {
+        if (!('BarcodeDetector' in window)) {
+          setMsg('Navegador sem leitor nativo. Cole URL NFC-e.');
+          return;
+        }
+        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
+        videoRef.current.srcObject = stream;
+        await videoRef.current.play();
+        const detector = new BarcodeDetector({ formats: ['qr_code'] });
+        timer = setInterval(async () => {
+          const codes = await detector.detect(videoRef.current).catch(() => []);
+          if (codes[0]?.rawValue) {
+            clearInterval(timer);
+            stream.getTracks().forEach(t => t.stop());
+            onResult(codes[0].rawValue);
+          }
+        }, 500);
+      } catch (err) {
+        setMsg(err.message);
+      }
+    }
+    start();
+    return () => {
+      if (timer) clearInterval(timer);
+      if (stream) stream.getTracks().forEach(t => t.stop());
+    };
+  }, []);
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" onClick={e => e.stopPropagation()}>
+        <div className="modal-header"><h2>Ler QR NFC-e</h2><button className="modal-close" onClick={onClose}>×</button></div>
+        <video ref={videoRef} className="qr-video" muted playsInline />
+        <div className="subtitle mt-2">{msg}</div>
+      </div>
+    </div>
+  );
+}
+
+function ReceiptDetails({ receipt, onClose }) {
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal wide" onClick={e => e.stopPropagation()}>
+        <div className="modal-header"><h2>{receipt.store}</h2><button className="modal-close" onClick={onClose}>×</button></div>
+        <div className="quick-grid details-summary">
+          <div className="glass-sm"><label>Data</label><strong>{brDate(receipt.date)}</strong></div>
+          <div className="glass-sm"><label>Total</label><strong>{money(receipt.total)}</strong></div>
+        </div>
+        <div className="table-panel">
+          <table><thead><tr><th>Item</th><th>Qtd</th><th>Unit.</th><th>Total</th></tr></thead>
+          <tbody>{(receipt.items || []).map((i, idx) => <tr key={idx}><td>{i.name}</td><td>{i.qty || '-'}</td><td>{i.unit ? money(i.unit) : '-'}</td><td>{money(i.total)}</td></tr>)}</tbody></table>
+        </div>
+      </div>
     </div>
   );
 }
