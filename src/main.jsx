@@ -376,18 +376,23 @@ function Transactions() {
 
 function Market() {
   const [rows, setRows] = useState([]);
-  const [form, setForm] = useState({ date: today(), store: '', total: '', url: '', items: [] });
+  const [payments, setPayments] = useState([]);
+  const [form, setForm] = useState({ date: today(), store: '', total: '', url: '', items: [], payments: [] });
   const [editing, setEditing] = useState(null);
   const [details, setDetails] = useState(null);
   const [scanOpen, setScanOpen] = useState(false);
   const [error, setError] = useState('');
-  async function load() { setRows(await api.get('/receipts')); }
+  async function load() {
+    const [rs, ps] = await Promise.all([api.get('/receipts'), api.get('/payment-methods')]);
+    setRows(rs);
+    setPayments(ps);
+  }
   useEffect(() => { load(); }, []);
   async function parseUrl(url) {
     setError('');
     try {
       const data = await api.post('/receipts/parse', { url });
-      setForm({ date: data.date || today(), store: data.store || '', total: data.total || '', url, items: data.items || [] });
+      setForm({ date: data.date || today(), store: data.store || '', total: data.total || '', url, items: data.items || [], payments: data.payments || [] });
       setScanOpen(false);
     } catch (err) {
       setError(err.message);
@@ -400,17 +405,26 @@ function Market() {
     if (editing) await api.put('/receipts/' + editing.id, payload);
     else await api.post('/receipts', payload);
     setEditing(null);
-    setForm({ date: today(), store: '', total: '', url: '', items: [] });
+    setForm({ date: today(), store: '', total: '', url: '', items: [], payments: [] });
     load();
   }
   function edit(row) {
     setEditing(row);
-    setForm({ date: row.date, store: row.store, total: row.total, url: row.url || '', items: row.items || [] });
+    setForm({ date: row.date, store: row.store, total: row.total, url: row.url || '', items: row.items || [], payments: row.payments || [] });
   }
   async function del(row) {
     if (!confirm('Excluir compra?')) return;
     await api.del('/receipts/' + row.id);
     load();
+  }
+  function setPayment(idx, patch) {
+    setForm(f => ({ ...f, payments: f.payments.map((p, i) => i === idx ? { ...p, ...patch } : p) }));
+  }
+  function addPayment() {
+    setForm(f => ({ ...f, payments: [...(f.payments || []), { method: payments[0]?.name || '', amount: '' }] }));
+  }
+  function removePayment(idx) {
+    setForm(f => ({ ...f, payments: f.payments.filter((_, i) => i !== idx) }));
   }
   return (
     <div>
@@ -423,8 +437,20 @@ function Market() {
         <input className="input" placeholder="URL NFC-e" value={form.url} onChange={e => setForm({ ...form, url: e.target.value })} />
         <button type="button" className="btn" onClick={() => parseUrl(form.url)}>Buscar nota</button>
         <button className="btn accent">{editing ? 'Atualizar' : 'Salvar compra'}</button>
-        {editing && <button type="button" className="btn ghost" onClick={() => { setEditing(null); setForm({ date: today(), store: '', total: '', url: '', items: [] }); }}>Cancelar</button>}
+        {editing && <button type="button" className="btn ghost" onClick={() => { setEditing(null); setForm({ date: today(), store: '', total: '', url: '', items: [], payments: [] }); }}>Cancelar</button>}
       </form>
+      <section className="glass mb-2">
+        <div className="settings-head mb-2"><div className="label">Pagamentos</div><button className="btn sm" onClick={addPayment}>+ Forma</button></div>
+        <div className="payment-list">
+          {(form.payments || []).map((p, idx) => (
+            <div className="payment-row" key={idx}>
+              <select className="select" value={p.method} onChange={e => setPayment(idx, { method: e.target.value })}>{mergeNamed(payments, [p.method]).map(x => <option key={x.name} value={x.name}>{x.name}</option>)}</select>
+              <input className="input" type="number" step="0.01" value={p.amount} onChange={e => setPayment(idx, { amount: e.target.value })} />
+              <button className="btn sm danger" onClick={() => removePayment(idx)}>×</button>
+            </div>
+          ))}
+        </div>
+      </section>
       <section className="glass table-panel">
         <table><thead><tr><th>Data</th><th>Mercado</th><th>Valor</th><th>Itens</th><th></th></tr></thead>
         <tbody>{rows.map(r => <tr key={r.id}><td>{brDate(r.date)}</td><td>{r.store}</td><td>{money(r.total)}</td><td>{r.items?.length || 0}</td><td><div className="table-actions"><button className="btn sm" onClick={() => setDetails(r)}>Detalhes</button><button className="btn sm" onClick={() => edit(r)}>Editar</button><button className="btn sm danger" onClick={() => del(r)}>×</button></div></td></tr>)}</tbody></table>
@@ -489,6 +515,7 @@ function ReceiptDetails({ receipt, onClose }) {
           <div className="glass-sm"><label>Data</label><strong>{brDate(receipt.date)}</strong></div>
           <div className="glass-sm"><label>Total</label><strong>{money(receipt.total)}</strong></div>
         </div>
+        {(receipt.payments || []).length > 0 && <div className="category-list mb-2">{receipt.payments.map((p, idx) => <div className="config-row" key={idx}><span className="badge">{p.method}</span><strong>{money(p.amount)}</strong></div>)}</div>}
         <div className="table-panel">
           <table><thead><tr><th>Item</th><th>Qtd</th><th>Unit.</th><th>Total</th></tr></thead>
           <tbody>{(receipt.items || []).map((i, idx) => <tr key={idx}><td>{i.name}</td><td>{i.qty || '-'}</td><td>{i.unit ? money(i.unit) : '-'}</td><td>{money(i.total)}</td></tr>)}</tbody></table>
@@ -507,6 +534,7 @@ function Settings() {
         <ConfigManager title="Tags" endpoint="/categories" emptyName="Nova tag" />
         <ConfigManager title="Grupos" endpoint="/groups" emptyName="Novo grupo" />
         <ConfigManager title="Contas e cartões" endpoint="/accounts" emptyName="Nova conta" hasType />
+        <ConfigManager title="Formas de pagamento" endpoint="/payment-methods" emptyName="Nova forma" />
       </div>
     </div>
   );
