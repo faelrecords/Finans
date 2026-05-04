@@ -101,6 +101,7 @@ function Login({ onLogin }) {
 function App() {
   const [user, setUser] = useState(api.user);
   const [tab, setTab] = useState('dashboard');
+  const readOnly = user?.role === 'user';
   if (!user) return <Login onLogin={setUser} />;
   function logout() {
     api.setAuth(null, null);
@@ -111,24 +112,28 @@ function App() {
       <nav className="navbar">
         <div className="brand"><div className="brand-icon"><span /><span /><span /></div>Finans</div>
         <div className="nav-links">
-          {[
+          {(readOnly ? [
+            ['dashboard', 'Dashboards']
+          ] : [
             ['dashboard', 'Dashboards'],
             ['transacoes', 'Transações'],
-            ['categorias', 'Categorias']
-          ].map(([key, label]) => <button key={key} className={`nav-link ${tab === key ? 'active' : ''}`} onClick={() => setTab(key)}>{label}</button>)}
+            ['categorias', 'Categorias'],
+            ['usuarios', 'Usuários']
+          ]).map(([key, label]) => <button key={key} className={`nav-link ${tab === key ? 'active' : ''}`} onClick={() => setTab(key)}>{label}</button>)}
         </div>
         <div className="nav-user"><span>{user.name}</span><button onClick={logout}>Sair</button></div>
       </nav>
       <main className="container">
-        {tab === 'dashboard' && <Dashboard />}
-        {tab === 'transacoes' && <Transactions />}
-        {tab === 'categorias' && <Categories />}
+        {tab === 'dashboard' && <Dashboard readOnly={readOnly} />}
+        {!readOnly && tab === 'transacoes' && <Transactions />}
+        {!readOnly && tab === 'categorias' && <Categories />}
+        {!readOnly && tab === 'usuarios' && <Users />}
       </main>
     </>
   );
 }
 
-function Dashboard() {
+function Dashboard({ readOnly = false }) {
   const [rows, setRows] = useState([]);
   const [categories, setCategories] = useState([]);
   const [dashboards, setDashboards] = useState([]);
@@ -202,14 +207,14 @@ function Dashboard() {
       <div className="page-header">
         <div><h1>{active?.title || 'Dashboards'}</h1><div className="subtitle">Resumo financeiro e gráficos personalizáveis</div></div>
         <div className="row-flex">
-          <button className="btn" onClick={renameDashboard} disabled={!active}>Renomear</button>
-          <button className="btn danger" onClick={deleteDashboard} disabled={dashboards.length <= 1}>Excluir página</button>
-          <button className="btn accent" onClick={() => setShowWidget(true)}>+ Widget</button>
+          {!readOnly && <button className="btn" onClick={renameDashboard} disabled={!active}>Renomear</button>}
+          {!readOnly && <button className="btn danger" onClick={deleteDashboard} disabled={dashboards.length <= 1}>Excluir página</button>}
+          {!readOnly && <button className="btn accent" onClick={() => setShowWidget(true)}>+ Widget</button>}
         </div>
       </div>
       <div className="dash-pages">
         {dashboards.map(d => <button key={d.id} className={`range-pill ${active?.id === d.id ? 'active' : ''}`} onClick={() => setActive(d)}>{d.title}</button>)}
-        <button className="range-pill add" onClick={createDashboard}>NewTab</button>
+        {!readOnly && <button className="range-pill add" onClick={createDashboard}>NewTab</button>}
       </div>
       <section className="quick-grid">
         <div className="glass-sm"><label>Saldo</label><strong>{money(balance)}</strong></div>
@@ -218,10 +223,10 @@ function Dashboard() {
         <div className="glass-sm"><label>Resultado mês</label><strong>{money(income - expense)}</strong></div>
       </section>
       {widgets.length === 0 ? (
-        <div className="glass empty-state"><h3>Nenhum widget ainda</h3><button className="btn accent mt-2" onClick={() => setShowWidget(true)}>+ Criar widget</button></div>
+        <div className="glass empty-state"><h3>Nenhum widget ainda</h3>{!readOnly && <button className="btn accent mt-2" onClick={() => setShowWidget(true)}>+ Criar widget</button>}</div>
       ) : (
         <div className="widgets-grid">
-          {widgets.map(w => <WidgetCard key={w.id} widget={w} rows={rows} categories={categories} onEdit={() => setEditing(w)} onDelete={() => deleteWidget(w.id)} />)}
+          {widgets.map(w => <WidgetCard key={w.id} widget={w} rows={rows} categories={categories} onEdit={readOnly ? null : () => setEditing(w)} onDelete={readOnly ? null : () => deleteWidget(w.id)} />)}
         </div>
       )}
       {(showWidget || editing) && <WidgetEditor initial={editing} onClose={() => { setEditing(null); setShowWidget(false); }} onSave={saveWidget} />}
@@ -241,8 +246,8 @@ function WidgetCard({ widget, rows, categories, onEdit, onDelete }) {
         <div className="widget-title">{widget.title}</div>
         <div className="widget-actions">
           <button title={hidden ? 'Mostrar dados' : 'Ocultar dados'} onClick={() => setHidden(v => !v)}>{hidden ? '◌' : '●'}</button>
-          <button onClick={onEdit}>✎</button>
-          <button onClick={onDelete}>×</button>
+          {onEdit && <button onClick={onEdit}>✎</button>}
+          {onDelete && <button onClick={onDelete}>×</button>}
         </div>
       </div>
       {widget.chart_type === 'kpi' ? (
@@ -392,6 +397,34 @@ function Categories() {
             </div>
           ))}
         </div>
+      </section>
+    </div>
+  );
+}
+
+function Users() {
+  const [rows, setRows] = useState([]);
+  const [form, setForm] = useState({ name: '', code: '', password: '', role: 'user' });
+  async function load() { setRows(await api.get('/users')); }
+  useEffect(() => { load(); }, []);
+  async function save(e) {
+    e.preventDefault();
+    await api.post('/users', form);
+    setForm({ name: '', code: '', password: '', role: 'user' });
+    load();
+  }
+  return (
+    <div>
+      <div className="page-header"><div><h1>Usuários</h1><div className="subtitle">Acesso administrativo e visualização de dashboard</div></div></div>
+      <form className="glass form-grid" onSubmit={save}>
+        <input className="input" placeholder="Nome" value={form.name} onChange={e => setForm({ ...form, name: e.target.value })} />
+        <input className="input" placeholder="Código" value={form.code} onChange={e => setForm({ ...form, code: e.target.value })} />
+        <input className="input" placeholder="Senha" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })} />
+        <select className="select" value={form.role} onChange={e => setForm({ ...form, role: e.target.value })}><option value="user">Somente dashboard</option><option value="admin">Admin</option></select>
+        <button className="btn accent">Criar usuário</button>
+      </form>
+      <section className="glass table-panel">
+        <table><thead><tr><th>Nome</th><th>Código</th><th>Perfil</th></tr></thead><tbody>{rows.map(u => <tr key={u.id}><td>{u.name}</td><td>{u.code}</td><td>{u.role === 'user' ? 'Somente dashboard' : u.role}</td></tr>)}</tbody></table>
       </section>
     </div>
   );
