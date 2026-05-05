@@ -149,7 +149,7 @@ function Dashboard({ readOnly = false }) {
   const [editing, setEditing] = useState(null);
   const [showWidget, setShowWidget] = useState(false);
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [filters, setFilters] = useState({ from: '', to: '', type: '', category: '', group: '', account: '' });
+  const [filters, setFilters] = useState({ month: '', week: '', from: '', to: '', type: '', category: '', group: '', account: '' });
   const filteredRows = useMemo(() => filterRows(rows, filters), [rows, filters]);
   const accountNames = useMemo(() => [...new Set([...accounts.map(a => a.name), ...uniqueOptions(rows, 'account')].filter(Boolean))], [accounts, rows]);
 
@@ -310,7 +310,7 @@ function Transactions() {
   const [form, setForm] = useState({ date: today(), type: 'expense', description: '', category: '', group: '', account: '', amount: '' });
   const [editing, setEditing] = useState(null);
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [filters, setFilters] = useState({ from: '', to: '', type: '', category: '', group: '', account: '' });
+  const [filters, setFilters] = useState({ month: '', week: '', from: '', to: '', type: '', category: '', group: '', account: '' });
   async function load() {
     const [tx, gs, cats, accs] = await Promise.all([api.get('/transactions'), api.get('/groups'), api.get('/categories'), api.get('/accounts')]);
     setRows(tx);
@@ -765,6 +765,8 @@ function mergeNamed(rows, names) {
 
 function filterRows(rows, filters) {
   return rows.filter(r => {
+    if (filters.month && monthKey(r.date) !== filters.month) return false;
+    if (filters.week && weekOfMonth(r.date) !== Number(filters.week)) return false;
     if (filters.from && r.date < filters.from) return false;
     if (filters.to && r.date > filters.to) return false;
     if (filters.type && r.type !== filters.type) return false;
@@ -776,6 +778,12 @@ function filterRows(rows, filters) {
     const slice = paymentSlice(r, filters);
     return slice.matched ? { ...r, amount: slice.amount, display_amount: slice.amount, original_amount: r.amount } : r;
   });
+}
+
+function weekOfMonth(date) {
+  const day = Number(String(date || '').slice(8, 10));
+  if (!day) return 0;
+  return Math.min(5, Math.ceil(day / 7));
 }
 
 function paymentSlice(row, filters) {
@@ -802,12 +810,17 @@ function hexToRgba(hex, alpha) {
 
 function FilterDrawer({ filters, setFilters, categories, groups, accounts, onClose }) {
   const set = (k, v) => setFilters({ ...filters, [k]: v });
-  const clear = () => setFilters({ from: '', to: '', type: '', category: '', group: '', account: '' });
+  const clear = () => setFilters({ month: '', week: '', from: '', to: '', type: '', category: '', group: '', account: '' });
+  const weekOptions = filters.month ? monthWeeks(filters.month) : [1, 2, 3, 4, 5];
   return (
     <div className="drawer-backdrop" onClick={onClose}>
       <aside className="filter-drawer" onClick={e => e.stopPropagation()}>
         <div className="drawer-head"><h2>Filtros</h2><button className="modal-close" onClick={onClose}>×</button></div>
         <div className="drawer-section">
+          <div className="grid-2">
+            <div className="field"><label className="label">Mês</label><input className="input" type="month" value={filters.month || ''} onChange={e => setFilters({ ...filters, month: e.target.value, week: '' })} /></div>
+            <div className="field"><label className="label">Semana do mês</label><select className="select" value={filters.week || ''} onChange={e => set('week', e.target.value)}><option value="">Todas</option>{weekOptions.map(w => <option key={w} value={w}>Semana {w}</option>)}</select></div>
+          </div>
           <div className="grid-2">
             <div className="field"><label className="label">De</label><input className="input" type="date" value={filters.from} onChange={e => set('from', e.target.value)} /></div>
             <div className="field"><label className="label">Até</label><input className="input" type="date" value={filters.to} onChange={e => set('to', e.target.value)} /></div>
@@ -821,6 +834,12 @@ function FilterDrawer({ filters, setFilters, categories, groups, accounts, onClo
       </aside>
     </div>
   );
+}
+
+function monthWeeks(month) {
+  const [year, m] = String(month).split('-').map(Number);
+  const days = new Date(year, m, 0).getDate();
+  return Array.from({ length: Math.ceil(days / 7) }, (_, i) => i + 1);
 }
 
 ReactDOM.createRoot(document.getElementById('root')).render(<App />);
