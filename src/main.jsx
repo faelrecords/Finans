@@ -1,7 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import ReactDOM from 'react-dom/client';
 import {
-  Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Line, LineChart,
+  Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, ComposedChart, Line, LineChart, ReferenceLine,
   Pie, PieChart, ResponsiveContainer, Tooltip, XAxis, YAxis
 } from 'recharts';
 import * as XLSX from 'xlsx';
@@ -24,6 +24,7 @@ const GROUPS = [
   { v: 'category', label: 'Categoria' },
   { v: 'group', label: 'Grupo' },
   { v: 'account', label: 'Cartão/Conta' },
+  { v: 'date', label: 'Data' },
   { v: 'month', label: 'Mês' },
   { v: 'type', label: 'Tipo' }
 ];
@@ -32,9 +33,36 @@ const TYPES = [
   { v: 'bar', label: 'Barras' },
   { v: 'line', label: 'Linha' },
   { v: 'area', label: 'Área' },
-  { v: 'pie', label: 'Pizza' }
+  { v: 'pie', label: 'Pizza' },
+  { v: 'donut', label: 'Donut' },
+  { v: 'combo', label: 'Linha + barras' },
+  { v: 'progress', label: 'Progresso' },
+  { v: 'gauge', label: 'Gauge' },
+  { v: 'ranking', label: 'Ranking' },
+  { v: 'sparkline', label: 'Sparkline' },
+  { v: 'scoreboard', label: 'Scoreboard' },
+  { v: 'table', label: 'Tabela' },
+  { v: 'heatmap', label: 'Heatmap' },
+  { v: 'formula', label: 'Fórmula' },
+  { v: 'compare', label: 'Comparação' }
 ];
 const SIZES = [1, 2, 3, 4, 6, 8, 12];
+const RANK_LIMITS = [3, 5, 10, 20];
+
+function kpiColor(value, widget) {
+  if (!widget.dynamic_color || widget.goal_value === '' || widget.goal_value == null) return widget.color || COLORS[0];
+  const goal = Number(widget.goal_value);
+  if (value < goal) return widget.color_below || '#ff8078';
+  if (value > goal) return widget.color_above || '#30d173';
+  return widget.color_on || '#ffb84d';
+}
+
+function applyOperation(a, b, op) {
+  if (op === '+') return a + b;
+  if (op === '-') return a - b;
+  if (op === '*') return a * b;
+  return b ? a / b : 0;
+}
 
 function metricValue(row, metric) {
   const value = Number(row.amount) || 0;
@@ -50,6 +78,7 @@ function groupName(row, groupBy) {
   if (groupBy === 'group') return row.group || 'Sem grupo';
   if (groupBy === 'account') return row.account || 'Sem cartão/conta';
   if (groupBy === 'month') return monthKey(row.date);
+  if (groupBy === 'date') return row.date || 'Sem data';
   if (groupBy === 'type') return row.type === 'income' ? 'Entrada' : 'Saída';
   return 'Total';
 }
@@ -212,6 +241,23 @@ function Dashboard({ readOnly = false }) {
     await api.del(`/widgets/${id}`);
     load();
   }
+  async function addPresets() {
+    if (!active) return;
+    const presets = [
+      { title: 'Saídas', chart_type: 'kpi', metric: 'expense', group_by: 'month', color: '#ff8078', size: 3, dynamic_color: true, goal_value: 1000 },
+      { title: 'Entradas', chart_type: 'kpi', metric: 'income', group_by: 'month', color: '#30d173', size: 3 },
+      { title: 'Saldo', chart_type: 'kpi', metric: 'balance', group_by: 'month', color: '#6d71f0', size: 3, dynamic_color: true, goal_value: 0 },
+      { title: 'Saídas por dia', chart_type: 'line', metric: 'expense', group_by: 'date', color: '#ff8078', size: 6 },
+      { title: 'Por categoria', chart_type: 'donut', metric: 'expense', group_by: 'category', color: '#6d71f0', size: 6 },
+      { title: 'Por grupo', chart_type: 'ranking', metric: 'expense', group_by: 'group', color: '#8a8ef5', size: 6, rank_limit: 5 },
+      { title: 'Progresso meta mensal', chart_type: 'progress', metric: 'expense', group_by: 'month', color: '#6d71f0', size: 6, goal_value: 1000, dynamic_color: true },
+      { title: 'Gauge saldo', chart_type: 'gauge', metric: 'balance', group_by: 'month', color: '#30d173', size: 3, goal_value: 1000, dynamic_color: true },
+      { title: 'Tabela detalhada', chart_type: 'table', metric: 'expense', group_by: 'category', color: '#6d71f0', size: 12 },
+      { title: 'Heatmap', chart_type: 'heatmap', metric: 'expense', group_by: 'date', color: '#6d71f0', size: 12 }
+    ];
+    for (const p of presets) await api.post('/widgets', { ...p, dashboard_id: active.id });
+    load();
+  }
 
   return (
     <div>
@@ -221,6 +267,7 @@ function Dashboard({ readOnly = false }) {
           <button className="btn" onClick={() => setFiltersOpen(true)}>Filtros</button>
           {!readOnly && <button className="btn" onClick={renameDashboard} disabled={!active}>Renomear</button>}
           {!readOnly && <button className="btn danger" onClick={deleteDashboard} disabled={dashboards.length <= 1}>Excluir página</button>}
+          {!readOnly && <button className="btn" onClick={addPresets} disabled={!active}>★ Sugeridos</button>}
           {!readOnly && <button className="btn accent" onClick={() => setShowWidget(true)}>+ Widget</button>}
         </div>
       </div>
@@ -232,7 +279,7 @@ function Dashboard({ readOnly = false }) {
         <div className="glass empty-state"><h3>Nenhum widget ainda</h3>{!readOnly && <button className="btn accent mt-2" onClick={() => setShowWidget(true)}>+ Criar widget</button>}</div>
       ) : (
         <div className="widgets-grid">
-          {widgets.map(w => <WidgetCard key={w.id} widget={w} rows={filteredRows} categories={categories} onEdit={readOnly ? null : () => setEditing(w)} onDelete={readOnly ? null : () => deleteWidget(w.id)} />)}
+          {widgets.map(w => <WidgetCard key={w.id} widget={w} rows={filteredRows} categories={categories} filters={filters} onEdit={readOnly ? null : () => setEditing(w)} onDelete={readOnly ? null : () => deleteWidget(w.id)} />)}
         </div>
       )}
       {filtersOpen && <FilterDrawer filters={filters} setFilters={setFilters} categories={categories} groups={groups} accounts={accountNames} onClose={() => setFiltersOpen(false)} />}
@@ -241,45 +288,95 @@ function Dashboard({ readOnly = false }) {
   );
 }
 
-function WidgetCard({ widget, rows, categories, onEdit, onDelete }) {
+function WidgetCard({ widget, rows, categories, filters, onEdit, onDelete }) {
   const [hidden, setHidden] = useState(false);
   const data = useMemo(() => grouped(rows, widget.metric, widget.group_by), [rows, widget]);
-  const value = aggregate(rows, widget.metric);
+  const value = widget.chart_type === 'formula'
+    ? applyOperation(aggregate(rows, widget.metric), aggregate(rows, widget.metric2 || 'income'), widget.operation || '/')
+    : aggregate(rows, widget.metric);
   const moneyMetric = widget.metric !== 'count';
   const formatted = moneyMetric ? money(value) : value.toLocaleString('pt-BR');
+  const color = kpiColor(value, widget);
+  const actions = (
+    <div className="widget-actions">
+      <button title={hidden ? 'Mostrar dados' : 'Ocultar dados'} onClick={() => setHidden(v => !v)}>{hidden ? '◌' : '●'}</button>
+      {onEdit && <button onClick={onEdit}>✎</button>}
+      {onDelete && <button onClick={onDelete}>×</button>}
+    </div>
+  );
+  const goal = widget.dynamic_color && widget.goal_value !== '' && widget.goal_value != null ? Number(widget.goal_value) : null;
   return (
     <div className={`widget size-${widget.size || 4}`}>
       <div className="widget-head">
         <div className="widget-title">{widget.title}</div>
-        <div className="widget-actions">
-          <button title={hidden ? 'Mostrar dados' : 'Ocultar dados'} onClick={() => setHidden(v => !v)}>{hidden ? '◌' : '●'}</button>
-          {onEdit && <button onClick={onEdit}>✎</button>}
-          {onDelete && <button onClick={onDelete}>×</button>}
-        </div>
+        {actions}
       </div>
-      {widget.chart_type === 'kpi' ? (
-        <div className="widget-kpi"><div className="value">{hidden ? '••••' : formatted}</div><div className="label">{METRICS.find(m => m.v === widget.metric)?.label}</div></div>
-      ) : (
-        <div className="widget-chart"><Chart type={widget.chart_type} data={data} color={widget.color} hidden={hidden} categories={categories} groupBy={widget.group_by} /></div>
-      )}
+      {['kpi', 'formula', 'compare'].includes(widget.chart_type) && <div className="widget-kpi"><div className="value" style={{ color }}>{hidden ? '••••' : formatted}</div><div className="label">{widget.chart_type === 'formula' ? `${METRICS.find(m => m.v === widget.metric)?.label} ${widget.operation || '/'} ${METRICS.find(m => m.v === (widget.metric2 || 'income'))?.label}` : METRICS.find(m => m.v === widget.metric)?.label}</div>{goal != null && !hidden && <div className="goal-line"><span>Meta: {money(goal)}</span><span style={{ color }}>{value < goal ? 'abaixo' : value > goal ? 'acima' : 'na meta'}</span></div>}</div>}
+      {widget.chart_type === 'progress' && <ProgressWidget value={value} widget={widget} hidden={hidden} />}
+      {widget.chart_type === 'gauge' && <GaugeWidget value={value} widget={widget} hidden={hidden} />}
+      {widget.chart_type === 'ranking' && <RankingWidget data={data} widget={widget} hidden={hidden} />}
+      {widget.chart_type === 'sparkline' && <div className="widget-chart"><Chart type="line" data={data} color={color} hidden={hidden} categories={categories} groupBy={widget.group_by} compact /></div>}
+      {widget.chart_type === 'scoreboard' && <Scoreboard rows={rows} hidden={hidden} />}
+      {widget.chart_type === 'table' && <WidgetTable rows={rows} hidden={hidden} />}
+      {widget.chart_type === 'heatmap' && <Heatmap rows={rows} widget={widget} hidden={hidden} />}
+      {!['kpi', 'formula', 'compare', 'progress', 'gauge', 'ranking', 'sparkline', 'scoreboard', 'table', 'heatmap'].includes(widget.chart_type) && <div className="widget-chart"><Chart type={widget.chart_type} data={data} color={color} hidden={hidden} categories={categories} groupBy={widget.group_by} widget={widget} /></div>}
     </div>
   );
 }
 
-function Chart({ type, data, color, hidden, categories, groupBy }) {
-  const tooltip = hidden ? null : <Tooltip formatter={v => money(v)} contentStyle={{ background: '#141415', border: '1px solid rgba(255,255,255,.1)', borderRadius: 10 }} />;
-  if (type === 'pie') return (
-    <ResponsiveContainer width="100%" height={220}><PieChart><Pie data={data} dataKey="value" nameKey="name" outerRadius={80} label={hidden ? false : { fill: '#acadb1' }}>{data.map((d, i) => <Cell key={i} fill={groupBy === 'category' ? colorForCategory(categories, d.name, COLORS[i % COLORS.length]) : COLORS[i % COLORS.length]} />)}</Pie>{tooltip}</PieChart></ResponsiveContainer>
+function Chart({ type, data, color, hidden, categories, groupBy, widget = {}, compact = false }) {
+  const tooltip = hidden ? null : <Tooltip formatter={v => money(v)} contentStyle={{ background: '#141415', border: '1px solid rgba(255,255,255,.1)', borderRadius: 10, color: '#e8e7ec' }} itemStyle={{ color: '#e8e7ec' }} labelStyle={{ color: '#acadb1' }} />;
+  const height = compact ? 90 : 220;
+  if (type === 'pie' || type === 'donut') return (
+    <ResponsiveContainer width="100%" height={height}><PieChart><Pie data={data} dataKey="value" nameKey="name" outerRadius={80} innerRadius={type === 'donut' ? 48 : 0} label={hidden ? false : { fill: '#acadb1' }}>{data.map((d, i) => <Cell key={i} fill={groupBy === 'category' ? colorForCategory(categories, d.name, COLORS[i % COLORS.length]) : COLORS[i % COLORS.length]} />)}</Pie>{tooltip}</PieChart></ResponsiveContainer>
+  );
+  if (type === 'combo') return (
+    <ResponsiveContainer width="100%" height={height}><ComposedChart data={data}><CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,.06)" /><XAxis dataKey="name" stroke="#acadb1" /><YAxis tick={hidden ? false : { fill: '#acadb1' }} stroke="#acadb1" />{tooltip}<Bar dataKey="value" fill={color} radius={[6, 6, 0, 0]} minPointSize={1}>{data.map((d, i) => <Cell key={i} fill={kpiColor(d.value, widget)} />)}</Bar><Line dataKey="value" stroke={widget.color2 || '#30d173'} strokeWidth={2} /></ComposedChart></ResponsiveContainer>
   );
   if (type === 'line') return (
-    <ResponsiveContainer width="100%" height={220}><LineChart data={data}><CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,.06)" /><XAxis dataKey="name" stroke="#acadb1" /><YAxis tick={hidden ? false : { fill: '#acadb1' }} stroke="#acadb1" />{tooltip}<Line dataKey="value" stroke={color} strokeWidth={2} /></LineChart></ResponsiveContainer>
+    <ResponsiveContainer width="100%" height={height}><LineChart data={data}><CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,.06)" /><XAxis dataKey="name" stroke="#acadb1" /><YAxis tick={hidden || compact ? false : { fill: '#acadb1' }} stroke="#acadb1" />{tooltip}{widget.dynamic_color && widget.goal_value !== '' && widget.goal_value != null && <ReferenceLine y={Number(widget.goal_value)} stroke={widget.color_on || '#ffb84d'} strokeDasharray="4 3" />}<Line dataKey="value" stroke={color} strokeWidth={2} dot={!compact} /></LineChart></ResponsiveContainer>
   );
   if (type === 'area') return (
-    <ResponsiveContainer width="100%" height={220}><AreaChart data={data}><CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,.06)" /><XAxis dataKey="name" stroke="#acadb1" /><YAxis tick={hidden ? false : { fill: '#acadb1' }} stroke="#acadb1" />{tooltip}<Area dataKey="value" stroke={color} fill={color} fillOpacity={0.25} /></AreaChart></ResponsiveContainer>
+    <ResponsiveContainer width="100%" height={height}><AreaChart data={data}><CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,.06)" /><XAxis dataKey="name" stroke="#acadb1" /><YAxis tick={hidden ? false : { fill: '#acadb1' }} stroke="#acadb1" />{tooltip}{widget.dynamic_color && widget.goal_value !== '' && widget.goal_value != null && <ReferenceLine y={Number(widget.goal_value)} stroke={widget.color_on || '#ffb84d'} strokeDasharray="4 3" />}<Area dataKey="value" stroke={color} fill={color} fillOpacity={0.25} /></AreaChart></ResponsiveContainer>
   );
   return (
-    <ResponsiveContainer width="100%" height={220}><BarChart data={data}><CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,.06)" /><XAxis dataKey="name" stroke="#acadb1" /><YAxis tick={hidden ? false : { fill: '#acadb1' }} stroke="#acadb1" />{tooltip}<Bar dataKey="value" fill={color} radius={[6, 6, 0, 0]} minPointSize={1}>{data.map((d, i) => <Cell key={i} fill={groupBy === 'category' ? colorForCategory(categories, d.name, color) : color} />)}</Bar></BarChart></ResponsiveContainer>
+    <ResponsiveContainer width="100%" height={height}><BarChart data={data}><CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,.06)" /><XAxis dataKey="name" stroke="#acadb1" /><YAxis tick={hidden ? false : { fill: '#acadb1' }} stroke="#acadb1" />{tooltip}{widget.dynamic_color && widget.goal_value !== '' && widget.goal_value != null && <ReferenceLine y={Number(widget.goal_value)} stroke={widget.color_on || '#ffb84d'} strokeDasharray="4 3" />}<Bar dataKey="value" fill={color} radius={[6, 6, 0, 0]} minPointSize={1}>{data.map((d, i) => <Cell key={i} fill={widget.dynamic_color ? kpiColor(d.value, widget) : groupBy === 'category' ? colorForCategory(categories, d.name, color) : color} />)}</Bar></BarChart></ResponsiveContainer>
   );
+}
+
+function ProgressWidget({ value, widget, hidden }) {
+  const goal = Number(widget.goal_value) || 100;
+  const pct = Math.min(100, Math.max(0, value / goal * 100));
+  const color = kpiColor(value, widget);
+  return <div className="widget-kpi"><div className="value" style={{ color }}>{hidden ? '••••' : money(value)}</div><div className="label">Meta: {money(goal)} · {pct.toFixed(1)}%</div><div className="progress-track"><div style={{ width: `${pct}%`, background: color }} /></div></div>;
+}
+
+function GaugeWidget({ value, widget, hidden }) {
+  const goal = Number(widget.goal_value) || 100;
+  const pct = Math.min(1, Math.max(0, value / goal));
+  const color = kpiColor(value, widget);
+  return <div className="gauge-box"><svg viewBox="0 0 200 110"><path d="M30 90 A70 70 0 0 1 170 90" fill="none" stroke="rgba(255,255,255,.1)" strokeWidth="16" strokeLinecap="round" /><path d="M30 90 A70 70 0 0 1 170 90" fill="none" stroke={color} strokeWidth="16" strokeLinecap="round" pathLength="100" strokeDasharray={`${pct * 100} 100`} /></svg><strong style={{ color }}>{hidden ? '••••' : money(value)}</strong><span>Meta {money(goal)}</span></div>;
+}
+
+function RankingWidget({ data, widget, hidden }) {
+  const rows = [...data].sort((a, b) => b.value - a.value).slice(0, widget.rank_limit || 5);
+  const max = Math.max(...rows.map(r => r.value), 1);
+  return <div className="rank-list">{rows.map((r, i) => <div key={r.name} className="rank-row"><div><span>#{i + 1}</span>{r.name}</div><strong>{hidden ? '••••' : money(r.value)}</strong><div className="rank-track"><i style={{ width: `${r.value / max * 100}%`, background: kpiColor(r.value, widget) }} /></div></div>)}</div>;
+}
+
+function Scoreboard({ rows, hidden }) {
+  const vals = [['Entradas', aggregate(rows, 'income')], ['Saídas', aggregate(rows, 'expense')], ['Saldo', aggregate(rows, 'balance')], ['Registros', aggregate(rows, 'count')]];
+  return <div className="score-grid">{vals.map(([k, v]) => <div key={k} className="glass-sm"><label>{k}</label><strong>{hidden ? '••••' : k === 'Registros' ? v : money(v)}</strong></div>)}</div>;
+}
+
+function WidgetTable({ rows, hidden }) {
+  return <div className="table-panel widget-table"><table><thead><tr><th>Data</th><th>Descrição</th><th>Grupo</th><th>Conta</th><th>Valor</th></tr></thead><tbody>{rows.slice(0, 10).map(r => <tr key={r.id}><td>{brDate(r.date)}</td><td>{r.description}</td><td>{r.group}</td><td>{r.account}</td><td>{hidden ? '••••' : money(r.amount)}</td></tr>)}</tbody></table></div>;
+}
+
+function Heatmap({ rows, widget, hidden }) {
+  const map = grouped(rows, widget.metric, 'date');
+  const max = Math.max(...map.map(d => d.value), 1);
+  return <div className="heatmap-grid">{map.slice(-70).map(d => <div key={d.name} title={`${d.name}: ${money(d.value)}`} style={{ background: hidden ? 'rgba(255,255,255,.08)' : `${widget.color || '#6d71f0'}${Math.max(25, Math.round(d.value / max * 99)).toString().padStart(2, '0')}` }} />)}</div>;
 }
 
 function WidgetEditor({ initial, onClose, onSave }) {
@@ -296,7 +393,11 @@ function WidgetEditor({ initial, onClose, onSave }) {
           <div className="field"><label className="label">Tipo</label><select className="select" value={w.chart_type} onChange={e => set('chart_type', e.target.value)}>{TYPES.map(t => <option key={t.v} value={t.v}>{t.label}</option>)}</select></div>
           <div className="field"><label className="label">Tamanho</label><select className="select" value={w.size} onChange={e => set('size', Number(e.target.value))}>{SIZES.map(s => <option key={s} value={s}>{s}</option>)}</select></div>
         </div>
-        <div className="field"><label className="label">Cor</label><div className="color-picker">{COLORS.map(c => <button type="button" key={c} className={`color-dot ${w.color === c ? 'selected' : ''}`} style={{ background: c }} onClick={() => set('color', c)} />)}</div></div>
+        {w.chart_type === 'formula' && <div className="grid-2"><div className="field"><label className="label">Métrica 2</label><select className="select" value={w.metric2 || 'income'} onChange={e => set('metric2', e.target.value)}>{METRICS.map(m => <option key={m.v} value={m.v}>{m.label}</option>)}</select></div><div className="field"><label className="label">Operação</label><select className="select" value={w.operation || '/'} onChange={e => set('operation', e.target.value)}><option value="/">Divisão</option><option value="+">Soma</option><option value="-">Diferença</option><option value="*">Produto</option></select></div></div>}
+        {w.chart_type === 'ranking' && <div className="field"><label className="label">Itens</label><select className="select" value={w.rank_limit || 5} onChange={e => set('rank_limit', Number(e.target.value))}>{RANK_LIMITS.map(n => <option key={n} value={n}>Top {n}</option>)}</select></div>}
+        {['progress', 'gauge'].includes(w.chart_type) && <div className="field"><label className="label">Meta</label><input className="input" type="number" step="0.01" value={w.goal_value ?? ''} onChange={e => set('goal_value', e.target.value === '' ? '' : Number(e.target.value))} /></div>}
+        {!w.dynamic_color && <div className="field"><label className="label">Cor</label><div className="color-picker">{COLORS.map(c => <button type="button" key={c} className={`color-dot ${w.color === c ? 'selected' : ''}`} style={{ background: c }} onClick={() => set('color', c)} />)}</div></div>}
+        {!['pie', 'donut', 'scoreboard', 'table', 'heatmap'].includes(w.chart_type) && <div className="field"><label className="label">Cor dinâmica por meta</label><button type="button" className={`range-pill ${w.dynamic_color ? 'active' : ''}`} onClick={() => set('dynamic_color', !w.dynamic_color)}>{w.dynamic_color ? 'Ligada' : 'Desligada'}</button>{w.dynamic_color && <div className="grid-2 mt-2"><input className="input" type="number" step="0.01" placeholder="Meta" value={w.goal_value ?? ''} onChange={e => set('goal_value', e.target.value === '' ? '' : Number(e.target.value))} /><input className="input" type="color" value={w.color_below || '#ff8078'} onChange={e => set('color_below', e.target.value)} /><input className="input" type="color" value={w.color_on || '#ffb84d'} onChange={e => set('color_on', e.target.value)} /><input className="input" type="color" value={w.color_above || '#30d173'} onChange={e => set('color_above', e.target.value)} /></div>}</div>}
         <div className="modal-actions"><button className="btn ghost" onClick={onClose}>Cancelar</button><button className="btn accent" onClick={() => onSave(w)}>Salvar</button></div>
       </div>
     </div>
@@ -386,7 +487,7 @@ function Debts() {
   const [form, setForm] = useState({ date: today(), due_date: '', creditor: '', description: '', category: '', group: '', account: '', amount: '' });
   const [editing, setEditing] = useState(null);
   const [paying, setPaying] = useState(null);
-  const [payForm, setPayForm] = useState({ date: today(), account: '', amount: '' });
+  const [payForm, setPayForm] = useState({ date: today(), account: '', group: '', amount: '' });
   async function load() {
     const [ds, gs, cats, accs] = await Promise.all([api.get('/debts'), api.get('/groups'), api.get('/categories'), api.get('/accounts')]);
     setRows(ds);
@@ -415,7 +516,7 @@ function Debts() {
   }
   function openPay(row) {
     setPaying(row);
-    setPayForm({ date: today(), account: row.account || '', amount: row.amount });
+    setPayForm({ date: today(), account: row.account || '', group: row.group || '', amount: row.amount });
   }
   async function pay(e) {
     e.preventDefault();
@@ -448,6 +549,7 @@ function Debts() {
             <div className="modal-header"><h2>Pagar dívida</h2><button type="button" className="modal-close" onClick={() => setPaying(null)}>×</button></div>
             <div className="field"><label className="label">Data pagamento</label><input className="input" type="date" value={payForm.date} onChange={e => setPayForm({ ...payForm, date: e.target.value })} /></div>
             <div className="field"><label className="label">Conta/cartão</label><select className="select" value={payForm.account} onChange={e => setPayForm({ ...payForm, account: e.target.value })}><option value="">Conta</option>{accounts.map(a => <option key={a.id} value={a.name}>{a.name}</option>)}</select></div>
+            <div className="field"><label className="label">Grupo</label><select className="select" value={payForm.group} onChange={e => setPayForm({ ...payForm, group: e.target.value })}><option value="">Grupo</option>{groups.map(g => <option key={g.id} value={g.name}>{g.name}</option>)}</select></div>
             <div className="field"><label className="label">Valor</label><input className="input" type="number" step="0.01" value={payForm.amount} onChange={e => setPayForm({ ...payForm, amount: e.target.value })} /></div>
             <div className="modal-actions"><button className="btn ghost" type="button" onClick={() => setPaying(null)}>Cancelar</button><button className="btn accent">Confirmar</button></div>
           </form>
@@ -872,11 +974,32 @@ function FilterDrawer({ filters, setFilters, categories, groups, accounts, onClo
   const set = (k, v) => setFilters({ ...filters, [k]: v });
   const clear = () => setFilters({ month: '', week: '', from: '', to: '', type: '', category: '', group: '', account: '' });
   const weekOptions = filters.month ? monthWeeks(filters.month) : [1, 2, 3, 4, 5];
+  function range(days) {
+    const to = today();
+    const d = new Date();
+    d.setDate(d.getDate() - (days - 1));
+    setFilters({ ...filters, month: '', week: '', from: d.toISOString().slice(0, 10), to });
+  }
+  function thisMonth() {
+    const now = new Date();
+    const month = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    setFilters({ ...filters, month, week: '', from: '', to: '' });
+  }
+  function thisWeek() {
+    const now = new Date();
+    const day = now.getDay();
+    const from = new Date(now);
+    from.setDate(now.getDate() - day);
+    const to = new Date(from);
+    to.setDate(from.getDate() + 6);
+    setFilters({ ...filters, month: '', week: '', from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) });
+  }
   return (
     <div className="drawer-backdrop" onClick={onClose}>
       <aside className="filter-drawer" onClick={e => e.stopPropagation()}>
         <div className="drawer-head"><h2>Filtros</h2><button className="modal-close" onClick={onClose}>×</button></div>
         <div className="drawer-section">
+          <div className="range-pills"><button className="range-pill" onClick={() => range(7)}>7 dias</button><button className="range-pill" onClick={() => range(14)}>14 dias</button><button className="range-pill" onClick={() => range(30)}>30 dias</button><button className="range-pill" onClick={() => range(90)}>90 dias</button><button className="range-pill" onClick={thisWeek}>Semana</button><button className="range-pill" onClick={thisMonth}>Mês</button></div>
           <div className="grid-2">
             <div className="field"><label className="label">Mês</label><input className="input" type="month" value={filters.month || ''} onChange={e => setFilters({ ...filters, month: e.target.value, week: '' })} /></div>
             <div className="field"><label className="label">Semana do mês</label><select className="select" value={filters.week || ''} onChange={e => set('week', e.target.value)}><option value="">Todas</option>{weekOptions.map(w => <option key={w} value={w}>Semana {w}</option>)}</select></div>
