@@ -119,6 +119,7 @@ function App() {
             ['dashboard', 'Dashboards'],
             ['transacoes', 'Transações'],
             ['dividas', 'Dívidas'],
+            ['dividasFixas', 'Dívidas fixas'],
             ['mercado', 'Mercado'],
             ['config', 'Configurações'],
             ['usuarios', 'Usuários']
@@ -130,6 +131,7 @@ function App() {
         {tab === 'dashboard' && <Dashboard readOnly={readOnly} />}
         {!readOnly && tab === 'transacoes' && <Transactions />}
         {!readOnly && tab === 'dividas' && <Debts />}
+        {!readOnly && tab === 'dividasFixas' && <FixedDebts />}
         {!readOnly && tab === 'mercado' && <Market />}
         {!readOnly && tab === 'config' && <Settings />}
         {!readOnly && tab === 'usuarios' && <Users />}
@@ -462,6 +464,62 @@ function DebtTable({ title, rows, onEdit, onDelete, onPay }) {
       <table><thead><tr><th>Data</th><th>Vencimento</th><th>Credor</th><th>Descrição</th><th>Grupo</th><th>Conta</th><th>Valor</th><th></th></tr></thead>
       <tbody>{rows.map(r => <tr key={r.id}><td>{brDate(r.date)}</td><td>{brDate(r.due_date)}</td><td>{r.creditor}</td><td>{r.description}</td><td>{r.group}</td><td>{r.account}</td><td>{money(r.amount)}</td><td><div className="table-actions">{onPay && <button className="btn sm accent" onClick={() => onPay(r)}>Pagar</button>}<button className="btn sm" onClick={() => onEdit(r)}>Editar</button><button className="btn sm danger" onClick={() => onDelete(r)}>×</button></div></td></tr>)}</tbody></table>
     </section>
+  );
+}
+
+function FixedDebts() {
+  const [rows, setRows] = useState([]);
+  const [groups, setGroups] = useState([]);
+  const [categories, setCategories] = useState([]);
+  const [accounts, setAccounts] = useState([]);
+  const [form, setForm] = useState({ start_date: today(), months: 12, creditor: '', description: '', category: '', group: '', account: '', amount: '' });
+  const [editing, setEditing] = useState(null);
+  async function load() {
+    const [fs, gs, cats, accs] = await Promise.all([api.get('/fixed-debts'), api.get('/groups'), api.get('/categories'), api.get('/accounts')]);
+    setRows(fs);
+    setGroups(gs);
+    setCategories(cats);
+    setAccounts(accs);
+  }
+  useEffect(() => { load(); }, []);
+  async function save(e) {
+    e.preventDefault();
+    const payload = { ...form, amount: Number(form.amount) || 0, months: Math.max(1, Number(form.months) || 1) };
+    if (editing) await api.put('/fixed-debts/' + editing.id, payload);
+    else await api.post('/fixed-debts', payload);
+    setEditing(null);
+    setForm({ start_date: today(), months: 12, creditor: '', description: '', category: '', group: '', account: '', amount: '' });
+    load();
+  }
+  function edit(row) {
+    setEditing(row);
+    setForm({ start_date: row.start_date || today(), months: row.months || 1, creditor: row.creditor || '', description: row.description || '', category: row.category || '', group: row.group || '', account: row.account || '', amount: row.amount });
+  }
+  async function del(row) {
+    if (!confirm('Excluir dívida fixa e parcelas em aberto?')) return;
+    await api.del('/fixed-debts/' + row.id);
+    load();
+  }
+  return (
+    <div>
+      <div className="page-header"><div><h1>Dívidas fixas</h1><div className="subtitle">Parcelas mensais geradas em dívidas</div></div></div>
+      <form className="glass form-grid fixed-debt-form" onSubmit={save}>
+        <input className="input" type="date" value={form.start_date} onChange={e => setForm({ ...form, start_date: e.target.value })} />
+        <input className="input" placeholder="Meses" type="number" min="1" max="240" value={form.months} onChange={e => setForm({ ...form, months: e.target.value })} />
+        <input className="input" placeholder="Credor" value={form.creditor} onChange={e => setForm({ ...form, creditor: e.target.value })} />
+        <input className="input" placeholder="Descrição" value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
+        <select className="select" value={form.category} onChange={e => setForm({ ...form, category: e.target.value })}><option value="">Tag</option>{categories.map(c => <option key={c.id} value={c.name}>{c.name}</option>)}</select>
+        <select className="select" value={form.group} onChange={e => setForm({ ...form, group: e.target.value })}><option value="">Grupo</option>{groups.map(g => <option key={g.id} value={g.name}>{g.name}</option>)}</select>
+        <select className="select" value={form.account} onChange={e => setForm({ ...form, account: e.target.value })}><option value="">Conta/cartão</option>{accounts.map(a => <option key={a.id} value={a.name}>{a.name}</option>)}</select>
+        <input className="input" placeholder="Valor mensal" type="number" step="0.01" value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} />
+        <button className="btn accent">{editing ? 'Atualizar' : 'Gerar parcelas'}</button>
+        {editing && <button type="button" className="btn ghost" onClick={() => { setEditing(null); setForm({ start_date: today(), months: 12, creditor: '', description: '', category: '', group: '', account: '', amount: '' }); }}>Cancelar</button>}
+      </form>
+      <section className="glass table-panel">
+        <table><thead><tr><th>Início</th><th>Meses</th><th>Credor</th><th>Descrição</th><th>Grupo</th><th>Conta/cartão</th><th>Valor/mês</th><th>Total</th><th></th></tr></thead>
+        <tbody>{rows.map(r => <tr key={r.id}><td>{brDate(r.start_date)}</td><td>{r.months}</td><td>{r.creditor}</td><td>{r.description}</td><td>{r.group}</td><td>{r.account}</td><td>{money(r.amount)}</td><td>{money(Number(r.amount) * Number(r.months || 0))}</td><td><div className="table-actions"><button className="btn sm" onClick={() => edit(r)}>Editar</button><button className="btn sm danger" onClick={() => del(r)}>×</button></div></td></tr>)}</tbody></table>
+      </section>
+    </div>
   );
 }
 
