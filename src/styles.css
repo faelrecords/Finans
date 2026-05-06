@@ -189,7 +189,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .payment-list { display: grid; gap: 10px; }
 .payment-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) 140px auto; gap: 10px; align-items: center; }
 .qr-video { width: 100%; aspect-ratio: 4 / 3; background: #050505; border-radius: var(--glass-radius-sm); border: 1px solid var(--border); object-fit: cover; }
-.details-summary { grid-template-columns: repeat(2, 1fr); }
+.details-summary { grid-template-columns: repeat(4, 1fr); }
 .table-panel { overflow-x: auto; padding: 0; }
 table { width: 100%; border-collapse: separate; border-spacing: 0; }
 th, td { padding: 14px 16px; text-align: left; border-bottom: 1px solid var(--border); font-size: 13px; }

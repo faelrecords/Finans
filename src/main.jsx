@@ -563,7 +563,7 @@ function Market() {
   }
   function edit(row) {
     setEditing(row);
-    setForm({ date: row.date, store: row.store, total: row.total, url: row.url || '', items: row.items || [], payments: row.payments || [] });
+    setForm({ date: row.date, store: row.store, total: row.total, subtotal: row.subtotal || row.total, discount: row.discount || 0, url: row.url || '', items: row.items || [], payments: row.payments || [] });
   }
   async function del(row) {
     if (!confirm('Excluir compra?')) return;
@@ -668,7 +668,9 @@ function ReceiptDetails({ receipt, onClose }) {
         <div className="modal-header"><h2>{receipt.store}</h2><button className="modal-close" onClick={onClose}>×</button></div>
         <div className="quick-grid details-summary">
           <div className="glass-sm"><label>Data</label><strong>{brDate(receipt.date)}</strong></div>
-          <div className="glass-sm"><label>Total</label><strong>{money(receipt.total)}</strong></div>
+          <div className="glass-sm"><label>Pago</label><strong>{money(receipt.total)}</strong></div>
+          <div className="glass-sm"><label>Subtotal</label><strong>{money(receipt.subtotal || receipt.total)}</strong></div>
+          <div className="glass-sm"><label>Desconto</label><strong>{money(receipt.discount || 0)}</strong></div>
         </div>
         {(receipt.payments || []).length > 0 && <div className="category-list mb-2">{receipt.payments.map((p, idx) => <div className="config-row" key={idx}><span className="badge">{p.method}{p.account ? ` · ${p.account}` : ''}{p.group ? ` · ${p.group}` : ''}</span><strong>{money(p.amount)}</strong></div>)}</div>}
         <div className="table-panel">
