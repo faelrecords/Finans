@@ -241,23 +241,6 @@ function Dashboard({ readOnly = false }) {
     await api.del(`/widgets/${id}`);
     load();
   }
-  async function addPresets() {
-    if (!active) return;
-    const presets = [
-      { title: 'Saídas', chart_type: 'kpi', metric: 'expense', group_by: 'month', color: '#ff8078', size: 3, dynamic_color: true, goal_value: 1000 },
-      { title: 'Entradas', chart_type: 'kpi', metric: 'income', group_by: 'month', color: '#30d173', size: 3 },
-      { title: 'Saldo', chart_type: 'kpi', metric: 'balance', group_by: 'month', color: '#6d71f0', size: 3, dynamic_color: true, goal_value: 0 },
-      { title: 'Saídas por dia', chart_type: 'line', metric: 'expense', group_by: 'date', color: '#ff8078', size: 6 },
-      { title: 'Por categoria', chart_type: 'donut', metric: 'expense', group_by: 'category', color: '#6d71f0', size: 6 },
-      { title: 'Por grupo', chart_type: 'ranking', metric: 'expense', group_by: 'group', color: '#8a8ef5', size: 6, rank_limit: 5 },
-      { title: 'Progresso meta mensal', chart_type: 'progress', metric: 'expense', group_by: 'month', color: '#6d71f0', size: 6, goal_value: 1000, dynamic_color: true },
-      { title: 'Gauge saldo', chart_type: 'gauge', metric: 'balance', group_by: 'month', color: '#30d173', size: 3, goal_value: 1000, dynamic_color: true },
-      { title: 'Tabela detalhada', chart_type: 'table', metric: 'expense', group_by: 'category', color: '#6d71f0', size: 12 },
-      { title: 'Heatmap', chart_type: 'heatmap', metric: 'expense', group_by: 'date', color: '#6d71f0', size: 12 }
-    ];
-    for (const p of presets) await api.post('/widgets', { ...p, dashboard_id: active.id });
-    load();
-  }
 
   return (
     <div>
@@ -267,7 +250,6 @@ function Dashboard({ readOnly = false }) {
           <button className="btn" onClick={() => setFiltersOpen(true)}>Filtros</button>
           {!readOnly && <button className="btn" onClick={renameDashboard} disabled={!active}>Renomear</button>}
           {!readOnly && <button className="btn danger" onClick={deleteDashboard} disabled={dashboards.length <= 1}>Excluir página</button>}
-          {!readOnly && <button className="btn" onClick={addPresets} disabled={!active}>★ Sugeridos</button>}
           {!readOnly && <button className="btn accent" onClick={() => setShowWidget(true)}>+ Widget</button>}
         </div>
       </div>
