@@ -971,7 +971,7 @@ function FilterDrawer({ filters, setFilters, categories, groups, accounts, onClo
     const now = new Date();
     const day = now.getDay();
     const from = new Date(now);
-    from.setDate(now.getDate() - (day ? day - 1 : 6));
+    from.setDate(now.getDate() - day);
     const to = new Date(from);
     to.setDate(from.getDate() + 6);
     setFilters({ ...filters, month: '', week: '', from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) });
