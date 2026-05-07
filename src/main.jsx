@@ -12,7 +12,8 @@ const COLORS = ['#6d71f0', '#8a8ef5', '#c4c6ff', '#30d173', '#ffb84d', '#ff8078'
 const today = () => new Date().toISOString().slice(0, 10);
 const monthKey = d => String(d || '').slice(0, 7);
 const money = v => 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-const brDate = d => d ? d.split('-').reverse().join('/') : '-';
+const brDate = d => d ? d.split('-').reverse().join('-') : '-';
+const chartLabel = name => /^\d{4}-\d{2}-\d{2}$/.test(String(name)) ? brDate(name) : name;
 
 const METRICS = [
   { v: 'expense', label: 'Saídas' },
@@ -324,16 +325,16 @@ function Chart({ type, data, color, hidden, categories, groupBy, widget = {}, co
     <ResponsiveContainer width="100%" height={height}><PieChart><Pie data={data} dataKey="value" nameKey="name" outerRadius={80} innerRadius={type === 'donut' ? 48 : 0} label={hidden ? false : { fill: '#acadb1' }}>{data.map((d, i) => <Cell key={i} fill={groupBy === 'category' ? colorForCategory(categories, d.name, COLORS[i % COLORS.length]) : COLORS[i % COLORS.length]} />)}</Pie>{tooltip}</PieChart></ResponsiveContainer>
   );
   if (type === 'combo') return (
-    <ResponsiveContainer width="100%" height={height}><ComposedChart data={data}><CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,.06)" /><XAxis dataKey="name" stroke="#acadb1" /><YAxis tick={hidden ? false : { fill: '#acadb1' }} stroke="#acadb1" />{tooltip}<Bar dataKey="value" fill={color} radius={[6, 6, 0, 0]} minPointSize={1}>{data.map((d, i) => <Cell key={i} fill={kpiColor(d.value, widget)} />)}</Bar><Line dataKey="value" stroke={widget.color2 || '#30d173'} strokeWidth={2} /></ComposedChart></ResponsiveContainer>
+    <ResponsiveContainer width="100%" height={height}><ComposedChart data={data}><CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,.06)" /><XAxis dataKey="name" tickFormatter={chartLabel} stroke="#acadb1" /><YAxis tick={hidden ? false : { fill: '#acadb1' }} stroke="#acadb1" />{tooltip}<Bar dataKey="value" fill={color} radius={[6, 6, 0, 0]} minPointSize={1}>{data.map((d, i) => <Cell key={i} fill={kpiColor(d.value, widget)} />)}</Bar><Line dataKey="value" stroke={widget.color2 || '#30d173'} strokeWidth={2} /></ComposedChart></ResponsiveContainer>
   );
   if (type === 'line') return (
-    <ResponsiveContainer width="100%" height={height}><LineChart data={data}><CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,.06)" /><XAxis dataKey="name" stroke="#acadb1" /><YAxis tick={hidden || compact ? false : { fill: '#acadb1' }} stroke="#acadb1" />{tooltip}{widget.dynamic_color && widget.goal_value !== '' && widget.goal_value != null && <ReferenceLine y={Number(widget.goal_value)} stroke={widget.color_on || '#ffb84d'} strokeDasharray="4 3" />}<Line dataKey="value" stroke={color} strokeWidth={2} dot={!compact} /></LineChart></ResponsiveContainer>
+    <ResponsiveContainer width="100%" height={height}><LineChart data={data}><CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,.06)" /><XAxis dataKey="name" tickFormatter={chartLabel} stroke="#acadb1" /><YAxis tick={hidden || compact ? false : { fill: '#acadb1' }} stroke="#acadb1" />{tooltip}{widget.dynamic_color && widget.goal_value !== '' && widget.goal_value != null && <ReferenceLine y={Number(widget.goal_value)} stroke={widget.color_on || '#ffb84d'} strokeDasharray="4 3" />}<Line dataKey="value" stroke={color} strokeWidth={2} dot={!compact} /></LineChart></ResponsiveContainer>
   );
   if (type === 'area') return (
-    <ResponsiveContainer width="100%" height={height}><AreaChart data={data}><CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,.06)" /><XAxis dataKey="name" stroke="#acadb1" /><YAxis tick={hidden ? false : { fill: '#acadb1' }} stroke="#acadb1" />{tooltip}{widget.dynamic_color && widget.goal_value !== '' && widget.goal_value != null && <ReferenceLine y={Number(widget.goal_value)} stroke={widget.color_on || '#ffb84d'} strokeDasharray="4 3" />}<Area dataKey="value" stroke={color} fill={color} fillOpacity={0.25} /></AreaChart></ResponsiveContainer>
+    <ResponsiveContainer width="100%" height={height}><AreaChart data={data}><CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,.06)" /><XAxis dataKey="name" tickFormatter={chartLabel} stroke="#acadb1" /><YAxis tick={hidden ? false : { fill: '#acadb1' }} stroke="#acadb1" />{tooltip}{widget.dynamic_color && widget.goal_value !== '' && widget.goal_value != null && <ReferenceLine y={Number(widget.goal_value)} stroke={widget.color_on || '#ffb84d'} strokeDasharray="4 3" />}<Area dataKey="value" stroke={color} fill={color} fillOpacity={0.25} /></AreaChart></ResponsiveContainer>
   );
   return (
-    <ResponsiveContainer width="100%" height={height}><BarChart data={data}><CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,.06)" /><XAxis dataKey="name" stroke="#acadb1" /><YAxis tick={hidden ? false : { fill: '#acadb1' }} stroke="#acadb1" />{tooltip}{widget.dynamic_color && widget.goal_value !== '' && widget.goal_value != null && <ReferenceLine y={Number(widget.goal_value)} stroke={widget.color_on || '#ffb84d'} strokeDasharray="4 3" />}<Bar dataKey="value" fill={color} radius={[6, 6, 0, 0]} minPointSize={1}>{data.map((d, i) => <Cell key={i} fill={widget.dynamic_color ? kpiColor(d.value, widget) : groupBy === 'category' ? colorForCategory(categories, d.name, color) : color} />)}</Bar></BarChart></ResponsiveContainer>
+    <ResponsiveContainer width="100%" height={height}><BarChart data={data}><CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,.06)" /><XAxis dataKey="name" tickFormatter={chartLabel} stroke="#acadb1" /><YAxis tick={hidden ? false : { fill: '#acadb1' }} stroke="#acadb1" />{tooltip}{widget.dynamic_color && widget.goal_value !== '' && widget.goal_value != null && <ReferenceLine y={Number(widget.goal_value)} stroke={widget.color_on || '#ffb84d'} strokeDasharray="4 3" />}<Bar dataKey="value" fill={color} radius={[6, 6, 0, 0]} minPointSize={1}>{data.map((d, i) => <Cell key={i} fill={widget.dynamic_color ? kpiColor(d.value, widget) : groupBy === 'category' ? colorForCategory(categories, d.name, color) : color} />)}</Bar></BarChart></ResponsiveContainer>
   );
 }
 
@@ -970,7 +971,7 @@ function FilterDrawer({ filters, setFilters, categories, groups, accounts, onClo
     const now = new Date();
     const day = now.getDay();
     const from = new Date(now);
-    from.setDate(now.getDate() - day);
+    from.setDate(now.getDate() - (day ? day - 1 : 6));
     const to = new Date(from);
     to.setDate(from.getDate() + 6);
     setFilters({ ...filters, month: '', week: '', from: from.toISOString().slice(0, 10), to: to.toISOString().slice(0, 10) });
