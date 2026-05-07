@@ -71,11 +71,9 @@ button, input, select, textarea { font: inherit; color: inherit; }
   gap: 22px;
 }
 .brand { font-size: 22px; font-weight: 800; letter-spacing: -0.6px; display: flex; align-items: center; gap: 10px; }
-.brand-icon { width: 28px; height: 28px; border-radius: 8px; background: linear-gradient(135deg, var(--accent), var(--accent-strong)); display: flex; align-items: flex-end; justify-content: center; gap: 2px; padding: 4px 5px; }
-.brand-icon span { background: #fff; width: 3px; border-radius: 2px; opacity: .95; }
-.brand-icon span:nth-child(1) { height: 35%; }
-.brand-icon span:nth-child(2) { height: 60%; }
-.brand-icon span:nth-child(3) { height: 90%; }
+.brand-icon { width: 28px; height: 28px; flex: 0 0 28px; }
+.brand-icon rect { fill: #111112; }
+.brand-icon path { fill: var(--success); }
 .nav-links { display: flex; gap: 4px; flex: 1; flex-wrap: wrap; }
 .nav-link { padding: 8px 14px; border-radius: 100px; color: var(--text-secondary); font-size: 13px; font-weight: 600; cursor: pointer; background: transparent; border: 0; transition: all .15s ease; }
 .nav-link:hover { color: var(--text-primary); background: rgba(255,255,255,.04); }

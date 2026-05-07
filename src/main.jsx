@@ -140,7 +140,7 @@ function App() {
   return (
     <>
       <nav className="navbar">
-        <div className="brand"><div className="brand-icon"><span /><span /><span /></div>Finans</div>
+        <div className="brand"><MoneyIcon />Finans</div>
         <div className="nav-links">
           {(readOnly ? [
             ['dashboard', 'Dashboards']
@@ -164,6 +164,15 @@ function App() {
         {!readOnly && tab === 'usuarios' && <Users />}
       </main>
     </>
+  );
+}
+
+function MoneyIcon() {
+  return (
+    <svg className="brand-icon" viewBox="0 0 64 64" aria-hidden="true">
+      <rect width="64" height="64" rx="16" />
+      <path d="M14 22c0-4.4 3.6-8 8-8h20c4.4 0 8 3.6 8 8v20c0 4.4-3.6 8-8 8H22c-4.4 0-8-3.6-8-8V22Zm8 2v16h20V24H22Zm10 13a5 5 0 1 0 0-10 5 5 0 0 0 0 10Zm-6-16a3 3 0 0 1-3 3h3v-3Zm12 0v3h3a3 3 0 0 1-3-3Zm-12 22h-3a3 3 0 0 1 3 3v-3Zm12 3a3 3 0 0 1 3-3h-3v3Z" />
+    </svg>
   );
 }
 
