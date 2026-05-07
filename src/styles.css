@@ -220,6 +220,11 @@ th { font-size: 11px; font-weight: 700; color: var(--text-tertiary); text-transf
 .rank-row div:first-child { display: flex; gap: 8px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rank-row span { color: var(--text-tertiary); }
 .rank-track { grid-column: 1 / -1; height: 5px; margin-top: 0; }
+.candle-wrap { position: relative; min-height: 230px; padding: 4px 10px 10px; }
+.candle-wrap svg { width: 100%; height: 230px; display: block; }
+.candle-grid { stroke: rgba(255,255,255,.06); stroke-width: 1; }
+.candle-goal { stroke: var(--warning); stroke-width: 2; stroke-dasharray: 8 6; }
+.candle-axis { position: absolute; inset: 12px 14px auto auto; display: grid; gap: 134px; color: var(--text-tertiary); font-size: 11px; text-align: right; pointer-events: none; }
 .score-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
 .score-grid label { display: block; color: var(--text-tertiary); font-size: 10px; text-transform: uppercase; margin-bottom: 5px; }
 .score-grid strong { font-size: 17px; }

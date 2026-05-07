@@ -31,6 +31,7 @@ const GROUPS = [
 const TYPES = [
   { v: 'kpi', label: 'KPI' },
   { v: 'bar', label: 'Barras' },
+  { v: 'candles', label: 'Candles' },
   { v: 'line', label: 'Linha' },
   { v: 'area', label: 'Área' },
   { v: 'pie', label: 'Pizza' },
@@ -306,11 +307,12 @@ function WidgetCard({ widget, rows, categories, filters, onEdit, onDelete }) {
       {widget.chart_type === 'progress' && <ProgressWidget value={value} widget={widget} hidden={hidden} />}
       {widget.chart_type === 'gauge' && <GaugeWidget value={value} widget={widget} hidden={hidden} />}
       {widget.chart_type === 'ranking' && <RankingWidget data={data} widget={widget} hidden={hidden} />}
+      {widget.chart_type === 'candles' && <CandlesWidget data={data} widget={widget} hidden={hidden} />}
       {widget.chart_type === 'sparkline' && <div className="widget-chart"><Chart type="line" data={data} color={color} hidden={hidden} categories={categories} groupBy={widget.group_by} compact /></div>}
       {widget.chart_type === 'scoreboard' && <Scoreboard rows={rows} hidden={hidden} />}
       {widget.chart_type === 'table' && <WidgetTable rows={rows} hidden={hidden} />}
       {widget.chart_type === 'heatmap' && <Heatmap rows={rows} widget={widget} hidden={hidden} />}
-      {!['kpi', 'formula', 'compare', 'progress', 'gauge', 'ranking', 'sparkline', 'scoreboard', 'table', 'heatmap'].includes(widget.chart_type) && <div className="widget-chart"><Chart type={widget.chart_type} data={data} color={color} hidden={hidden} categories={categories} groupBy={widget.group_by} widget={widget} /></div>}
+      {!['kpi', 'formula', 'compare', 'progress', 'gauge', 'ranking', 'candles', 'sparkline', 'scoreboard', 'table', 'heatmap'].includes(widget.chart_type) && <div className="widget-chart"><Chart type={widget.chart_type} data={data} color={color} hidden={hidden} categories={categories} groupBy={widget.group_by} widget={widget} /></div>}
     </div>
   );
 }
@@ -353,6 +355,48 @@ function RankingWidget({ data, widget, hidden }) {
   const rows = [...data].sort((a, b) => b.value - a.value).slice(0, widget.rank_limit || 5);
   const max = Math.max(...rows.map(r => r.value), 1);
   return <div className="rank-list">{rows.map((r, i) => <div key={r.name} className="rank-row"><div><span>#{i + 1}</span>{r.name}</div><strong>{hidden ? '••••' : money(r.value)}</strong><div className="rank-track"><i style={{ width: `${r.value / max * 100}%`, background: kpiColor(r.value, widget) }} /></div></div>)}</div>;
+}
+
+function CandlesWidget({ data, widget, hidden }) {
+  const rows = [...data].sort((a, b) => String(a.name).localeCompare(String(b.name))).slice(-40);
+  if (!rows.length) return <div className="empty-widget">Sem dados</div>;
+  const values = rows.flatMap((r, i) => {
+    const open = i ? rows[i - 1].value : r.value;
+    const close = r.value;
+    return [open, close];
+  });
+  const goal = widget.dynamic_color && widget.goal_value !== '' && widget.goal_value != null ? Number(widget.goal_value) : null;
+  if (goal != null) values.push(goal);
+  const min = Math.min(...values, 0);
+  const max = Math.max(...values, 1);
+  const y = v => 170 - ((v - min) / Math.max(1, max - min)) * 140;
+  const step = 640 / rows.length;
+  return (
+    <div className="candle-wrap">
+      <svg viewBox="0 0 680 210" preserveAspectRatio="none">
+        {[0, 1, 2, 3].map(i => <line key={i} x1="0" x2="680" y1={30 + i * 45} y2={30 + i * 45} className="candle-grid" />)}
+        {goal != null && <line x1="0" x2="680" y1={y(goal)} y2={y(goal)} className="candle-goal" />}
+        {rows.map((r, i) => {
+          const open = i ? rows[i - 1].value : r.value;
+          const close = r.value;
+          const high = Math.max(open, close);
+          const low = Math.min(open, close);
+          const x = 20 + i * step + step / 2;
+          const bodyTop = y(high);
+          const bodyHeight = Math.max(4, Math.abs(y(open) - y(close)));
+          const isAbove = goal == null ? close >= open : close >= goal;
+          const fill = isAbove ? (widget.color_above || '#30d173') : (widget.color_below || '#ff453a');
+          return (
+            <g key={r.name}>
+              <line x1={x} x2={x} y1={y(high)} y2={y(low)} stroke={fill} strokeWidth="2" />
+              <rect x={x - Math.max(3, step * 0.28)} y={bodyTop} width={Math.max(6, step * 0.56)} height={bodyHeight} rx="2" fill={fill} />
+            </g>
+          );
+        })}
+      </svg>
+      {!hidden && <div className="candle-axis"><span>{money(max)}</span><span>{money(min)}</span></div>}
+    </div>
+  );
 }
 
 function Scoreboard({ rows, hidden }) {
