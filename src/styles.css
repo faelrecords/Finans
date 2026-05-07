@@ -237,7 +237,8 @@ th { font-size: 11px; font-weight: 700; color: var(--text-tertiary); text-transf
 .switch i { display: block; width: 16px; height: 16px; border-radius: 50%; background: #fff; transition: transform .2s; }
 .switch.on { background: var(--accent); }
 .switch.on i { transform: translateX(18px); }
-.meta-grid { display: grid; grid-template-columns: 1fr; gap: 10px; padding: 12px; background: rgba(255,255,255,.04); border-radius: var(--glass-radius-xs); }
+.meta-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px 16px; }
+.meta-full { grid-column: 1 / -1; }
 .meta-grid .field { margin: 0; }
 .color-field { height: 40px; padding: 4px 6px; cursor: pointer; }
 .hint { color: var(--text-tertiary); font-size: 11px; }
@@ -249,6 +250,8 @@ th { font-size: 11px; font-weight: 700; color: var(--text-tertiary); text-transf
 
 @media (max-width: 960px) {
   .quick-grid, .form-grid, .market-form, .debt-form, .payment-row, .grid-2, .settings-grid, .config-form, .details-summary, .score-grid { grid-template-columns: 1fr; }
+  .meta-grid { grid-template-columns: 1fr; }
+  .meta-full { grid-column: auto; }
   .widget.size-1, .widget.size-2, .widget.size-3, .widget.size-4, .widget.size-6, .widget.size-8 { grid-column: span 12; }
 }
 @media (max-width: 760px) {
