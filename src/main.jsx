@@ -93,7 +93,9 @@ function grouped(rows, metric, groupBy) {
     const name = groupName(row, groupBy);
     map.set(name, (map.get(name) || 0) + metricValue(row, metric));
   }
-  return [...map.entries()].map(([name, value]) => ({ name, value }));
+  return [...map.entries()]
+    .map(([name, value]) => ({ name, value }))
+    .sort((a, b) => ['date', 'month'].includes(groupBy) ? a.name.localeCompare(b.name) : 0);
 }
 
 function colorForCategory(categories, name, fallback = '#6d71f0') {
@@ -874,7 +876,7 @@ function filterRows(rows, filters) {
   }).map(r => {
     const slice = paymentSlice(r, filters);
     return slice.matched ? { ...r, amount: slice.amount, display_amount: slice.amount, original_amount: r.amount } : r;
-  });
+  }).sort((a, b) => String(a.date || '').localeCompare(String(b.date || '')) || Number(a.id || 0) - Number(b.id || 0));
 }
 
 function weekOfMonth(date) {
@@ -934,7 +936,7 @@ function FilterDrawer({ filters, setFilters, categories, groups, accounts, onClo
       <aside className="filter-drawer" onClick={e => e.stopPropagation()}>
         <div className="drawer-head"><h2>Filtros</h2><button className="modal-close" onClick={onClose}>×</button></div>
         <div className="drawer-section">
-          <div className="range-pills"><button className="range-pill" onClick={() => range(7)}>7 dias</button><button className="range-pill" onClick={() => range(14)}>14 dias</button><button className="range-pill" onClick={() => range(30)}>30 dias</button><button className="range-pill" onClick={() => range(90)}>90 dias</button><button className="range-pill" onClick={thisWeek}>Semana</button><button className="range-pill" onClick={thisMonth}>Mês</button></div>
+          <div className="range-pills"><button className="range-pill" onClick={() => range(7)}>7 dias</button><button className="range-pill" onClick={() => range(14)}>14 dias</button><button className="range-pill" onClick={() => range(30)}>30 dias</button><button className="range-pill" onClick={() => range(90)}>90 dias</button><button className="range-pill" onClick={thisWeek}>Semana</button><button className="range-pill" onClick={thisMonth}>Mês</button><button className="range-pill" onClick={clear}>Tudo</button></div>
           <div className="grid-2">
             <div className="field"><label className="label">Mês</label><input className="input" type="month" value={filters.month || ''} onChange={e => setFilters({ ...filters, month: e.target.value, week: '' })} /></div>
             <div className="field"><label className="label">Semana do mês</label><select className="select" value={filters.week || ''} onChange={e => set('week', e.target.value)}><option value="">Todas</option>{weekOptions.map(w => <option key={w} value={w}>Semana {w}</option>)}</select></div>
