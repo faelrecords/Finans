@@ -14,6 +14,7 @@ const monthKey = d => String(d || '').slice(0, 7);
 const money = v => 'R$ ' + Number(v || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 const brDate = d => d ? d.split('-').reverse().join('-') : '-';
 const chartLabel = name => /^\d{4}-\d{2}-\d{2}$/.test(String(name)) ? brDate(name) : name;
+const nfceKey = v => String(v || '').replace(/\D/g, '').slice(0, 44).replace(/(.{4})/g, '$1 ').trim();
 
 const METRICS = [
   { v: 'expense', label: 'Saídas' },
@@ -612,7 +613,7 @@ function Market() {
   const [payments, setPayments] = useState([]);
   const [groups, setGroups] = useState([]);
   const [accounts, setAccounts] = useState([]);
-  const [form, setForm] = useState({ date: today(), store: '', total: '', url: '', items: [], payments: [] });
+  const [form, setForm] = useState({ date: today(), store: '', total: '', url: '', access_key: '', items: [], payments: [] });
   const [editing, setEditing] = useState(null);
   const [details, setDetails] = useState(null);
   const [scanOpen, setScanOpen] = useState(false);
@@ -629,7 +630,7 @@ function Market() {
     setError('');
     try {
       const data = await api.post('/receipts/parse', { url });
-      setForm({ date: data.date || today(), store: data.store || '', total: data.total || '', url, items: data.items || [], payments: data.payments || [] });
+      setForm(f => ({ ...f, date: data.date || today(), store: data.store || '', total: data.total || '', subtotal: data.subtotal || data.total || '', discount: data.discount || 0, url: data.url || url, items: data.items || [], payments: data.payments || [] }));
       setScanOpen(false);
     } catch (err) {
       setError(err.message);
@@ -642,12 +643,12 @@ function Market() {
     if (editing) await api.put('/receipts/' + editing.id, payload);
     else await api.post('/receipts', payload);
     setEditing(null);
-    setForm({ date: today(), store: '', total: '', url: '', items: [], payments: [] });
+    setForm({ date: today(), store: '', total: '', url: '', access_key: '', items: [], payments: [] });
     load();
   }
   function edit(row) {
     setEditing(row);
-    setForm({ date: row.date, store: row.store, total: row.total, subtotal: row.subtotal || row.total, discount: row.discount || 0, url: row.url || '', items: row.items || [], payments: row.payments || [] });
+    setForm({ date: row.date, store: row.store, total: row.total, subtotal: row.subtotal || row.total, discount: row.discount || 0, url: row.url || '', access_key: '', items: row.items || [], payments: row.payments || [] });
   }
   async function del(row) {
     if (!confirm('Excluir compra?')) return;
@@ -673,8 +674,10 @@ function Market() {
         <input className="input" placeholder="Valor total" type="number" step="0.01" value={form.total} onChange={e => setForm({ ...form, total: e.target.value })} />
         <input className="input" placeholder="URL NFC-e" value={form.url} onChange={e => setForm({ ...form, url: e.target.value })} />
         <button type="button" className="btn" onClick={() => parseUrl(form.url)}>Buscar nota</button>
+        <input className="input key-input" placeholder="Chave 0000 0000 0000..." value={form.access_key} onChange={e => setForm({ ...form, access_key: nfceKey(e.target.value) })} />
+        <button type="button" className="btn" onClick={() => parseUrl(form.access_key)}>Buscar chave</button>
         <button className="btn accent">{editing ? 'Atualizar' : 'Salvar compra'}</button>
-        {editing && <button type="button" className="btn ghost" onClick={() => { setEditing(null); setForm({ date: today(), store: '', total: '', url: '', items: [], payments: [] }); }}>Cancelar</button>}
+        {editing && <button type="button" className="btn ghost" onClick={() => { setEditing(null); setForm({ date: today(), store: '', total: '', url: '', access_key: '', items: [], payments: [] }); }}>Cancelar</button>}
       </form>
       <section className="glass mb-2">
         <div className="settings-head mb-2"><div className="label">Pagamentos</div><button className="btn sm" onClick={addPayment}>+ Forma</button></div>
