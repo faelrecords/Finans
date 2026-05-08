@@ -154,6 +154,7 @@ function App() {
             ['transacoes', 'Transações'],
             ['dividas', 'Dívidas'],
             ['mercado', 'Mercado'],
+            ['mercadinho', 'Mercadinho'],
             ['config', 'Configurações'],
             ['usuarios', 'Usuários']
           ]).map(([key, label]) => <button key={key} className={`nav-link ${tab === key ? 'active' : ''}`} onClick={() => setTab(key)}>{label}</button>)}
@@ -165,6 +166,7 @@ function App() {
         {!readOnly && tab === 'transacoes' && <Transactions />}
         {!readOnly && tab === 'dividas' && <Debts />}
         {!readOnly && tab === 'mercado' && <Market />}
+        {!readOnly && tab === 'mercadinho' && <Mercadinho />}
         {!readOnly && tab === 'config' && <Settings />}
         {!readOnly && tab === 'usuarios' && <Users />}
       </main>
@@ -604,6 +606,91 @@ function DebtTable({ title, rows, onEdit, onDelete, onPay }) {
       <div className="table-title">{title}</div>
       <table><thead><tr><th>Data</th><th>Vencimento</th><th>Credor</th><th>Descrição</th><th>Grupo</th><th>Conta</th><th>Valor</th><th></th></tr></thead>
       <tbody>{rows.map(r => <tr key={r.id}><td>{brDate(r.date)}</td><td>{brDate(r.due_date)}</td><td>{r.creditor}</td><td>{r.description}</td><td>{r.group}</td><td>{r.account}</td><td>{money(r.amount)}</td><td><div className="table-actions">{onPay && <button className="btn sm accent" onClick={() => onPay(r)}>Pagar</button>}<button className="btn sm" onClick={() => onEdit(r)}>Editar</button><button className="btn sm danger" onClick={() => onDelete(r)}>×</button></div></td></tr>)}</tbody></table>
+    </section>
+  );
+}
+
+function Mercadinho() {
+  const [rows, setRows] = useState([]);
+  const [groups, setGroups] = useState([]);
+  const [accounts, setAccounts] = useState([]);
+  const [form, setForm] = useState({ purchase_date: today(), due_date: '', item: '', amount: '', notes: '' });
+  const [editing, setEditing] = useState(null);
+  const [paying, setPaying] = useState(null);
+  const [payForm, setPayForm] = useState({ date: today(), account: '', group: 'Mercadinho', amount: '' });
+  async function load() {
+    const [list, gs, accs] = await Promise.all([api.get('/mercadinho'), api.get('/groups'), api.get('/accounts')]);
+    setRows(list);
+    setGroups(gs);
+    setAccounts(accs);
+  }
+  useEffect(() => { load(); }, []);
+  async function save(e) {
+    e.preventDefault();
+    const payload = { ...form, amount: Number(form.amount) || 0 };
+    if (editing) await api.put('/mercadinho/' + editing.id, payload);
+    else await api.post('/mercadinho', payload);
+    setEditing(null);
+    setForm({ purchase_date: today(), due_date: '', item: '', amount: '', notes: '' });
+    load();
+  }
+  function edit(row) {
+    setEditing(row);
+    setForm({ purchase_date: row.purchase_date || today(), due_date: row.due_date || '', item: row.item || '', amount: row.amount, notes: row.notes || '' });
+  }
+  async function del(row) {
+    if (!confirm('Excluir compra do mercadinho?')) return;
+    await api.del('/mercadinho/' + row.id);
+    load();
+  }
+  function openPay(row) {
+    setPaying(row);
+    setPayForm({ date: today(), account: '', group: 'Mercadinho', amount: row.amount });
+  }
+  async function pay(e) {
+    e.preventDefault();
+    await api.post('/mercadinho/' + paying.id + '/pay', { ...payForm, amount: Number(payForm.amount) || 0 });
+    setPaying(null);
+    load();
+  }
+  const open = rows.filter(r => !r.paid);
+  const paid = rows.filter(r => r.paid);
+  return (
+    <div>
+      <div className="page-header"><div><h1>Mercadinho</h1><div className="subtitle">Dívidas do mercadinho interno</div></div></div>
+      <form className="glass form-grid mini-market-form" onSubmit={save}>
+        <input className="input" type="date" value={form.purchase_date} onChange={e => setForm({ ...form, purchase_date: e.target.value })} />
+        <input className="input" type="date" value={form.due_date} onChange={e => setForm({ ...form, due_date: e.target.value })} />
+        <input className="input" placeholder="O que comprei" value={form.item} onChange={e => setForm({ ...form, item: e.target.value })} />
+        <input className="input" placeholder="Valor" type="number" step="0.01" value={form.amount} onChange={e => setForm({ ...form, amount: e.target.value })} />
+        <input className="input" placeholder="Observação" value={form.notes} onChange={e => setForm({ ...form, notes: e.target.value })} />
+        <button className="btn accent">{editing ? 'Atualizar' : 'Salvar'}</button>
+        {editing && <button type="button" className="btn ghost" onClick={() => { setEditing(null); setForm({ purchase_date: today(), due_date: '', item: '', amount: '', notes: '' }); }}>Cancelar</button>}
+      </form>
+      <MiniMarketTable title="Em aberto" rows={open} onEdit={edit} onDelete={del} onPay={openPay} />
+      <MiniMarketTable title="Pagas" rows={paid} onEdit={edit} onDelete={del} />
+      {paying && (
+        <div className="modal-backdrop" onClick={() => setPaying(null)}>
+          <form className="modal" onSubmit={pay} onClick={e => e.stopPropagation()}>
+            <div className="modal-header"><h2>Pagar mercadinho</h2><button type="button" className="modal-close" onClick={() => setPaying(null)}>×</button></div>
+            <div className="field"><label className="label">Data pagamento</label><input className="input" type="date" value={payForm.date} onChange={e => setPayForm({ ...payForm, date: e.target.value })} /></div>
+            <div className="field"><label className="label">Conta/cartão</label><select className="select" value={payForm.account} onChange={e => setPayForm({ ...payForm, account: e.target.value })}><option value="">Conta</option>{accounts.map(a => <option key={a.id} value={a.name}>{a.name}</option>)}</select></div>
+            <div className="field"><label className="label">Grupo</label><select className="select" value={payForm.group} onChange={e => setPayForm({ ...payForm, group: e.target.value })}><option value="Mercadinho">Mercadinho</option>{groups.map(g => <option key={g.id} value={g.name}>{g.name}</option>)}</select></div>
+            <div className="field"><label className="label">Valor</label><input className="input" type="number" step="0.01" value={payForm.amount} onChange={e => setPayForm({ ...payForm, amount: e.target.value })} /></div>
+            <div className="modal-actions"><button className="btn ghost" type="button" onClick={() => setPaying(null)}>Cancelar</button><button className="btn accent">Confirmar</button></div>
+          </form>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MiniMarketTable({ title, rows, onEdit, onDelete, onPay }) {
+  return (
+    <section className="glass table-panel mb-2">
+      <div className="table-title">{title}</div>
+      <table><thead><tr><th>Compra</th><th>Pagamento</th><th>Item</th><th>Valor</th><th>Obs.</th><th></th></tr></thead>
+      <tbody>{rows.map(r => <tr key={r.id}><td>{brDate(r.purchase_date)}</td><td>{brDate(r.due_date)}</td><td>{r.item}</td><td>{money(r.amount)}</td><td>{r.notes}</td><td><div className="table-actions">{onPay && <button className="btn sm accent" onClick={() => onPay(r)}>Pagar</button>}<button className="btn sm" onClick={() => onEdit(r)}>Editar</button><button className="btn sm danger" onClick={() => onDelete(r)}>×</button></div></td></tr>)}</tbody></table>
     </section>
   );
 }

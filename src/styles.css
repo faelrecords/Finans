@@ -184,6 +184,7 @@ button, input, select, textarea { font: inherit; color: inherit; }
 .market-form { grid-template-columns: 160px 1fr 160px 1.5fr auto 1.6fr auto auto auto; }
 .key-input { min-width: 260px; }
 .debt-form { grid-template-columns: 150px 150px 110px 1fr 1.2fr 160px 160px 180px 140px auto auto; }
+.mini-market-form { grid-template-columns: 150px 150px 1.4fr 140px 1fr auto auto; }
 .payment-list { display: grid; gap: 10px; }
 .payment-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr) 140px auto; gap: 10px; align-items: center; }
 .qr-video { width: 100%; aspect-ratio: 4 / 3; background: #050505; border-radius: var(--glass-radius-sm); border: 1px solid var(--border); object-fit: cover; }
@@ -250,7 +251,7 @@ th { font-size: 11px; font-weight: 700; color: var(--text-tertiary); text-transf
 .drawer-section { display: grid; gap: 4px; }
 
 @media (max-width: 960px) {
-  .quick-grid, .form-grid, .market-form, .debt-form, .payment-row, .grid-2, .settings-grid, .config-form, .details-summary, .score-grid { grid-template-columns: 1fr; }
+  .quick-grid, .form-grid, .market-form, .debt-form, .mini-market-form, .payment-row, .grid-2, .settings-grid, .config-form, .details-summary, .score-grid { grid-template-columns: 1fr; }
   .meta-grid { grid-template-columns: 1fr; }
   .meta-full { grid-column: auto; }
   .widget.size-1, .widget.size-2, .widget.size-3, .widget.size-4, .widget.size-6, .widget.size-8 { grid-column: span 12; }
