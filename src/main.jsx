@@ -700,17 +700,19 @@ function Market() {
   const [payments, setPayments] = useState([]);
   const [groups, setGroups] = useState([]);
   const [accounts, setAccounts] = useState([]);
+  const [settings, setSettings] = useState({ marketLimit: 115 });
   const [form, setForm] = useState({ date: today(), store: '', total: '', url: '', access_key: '', items: [], payments: [] });
   const [editing, setEditing] = useState(null);
   const [details, setDetails] = useState(null);
   const [scanOpen, setScanOpen] = useState(false);
   const [error, setError] = useState('');
   async function load() {
-    const [rs, ps, gs, accs] = await Promise.all([api.get('/receipts'), api.get('/payment-methods'), api.get('/groups'), api.get('/accounts')]);
+    const [rs, ps, gs, accs, cfg] = await Promise.all([api.get('/receipts'), api.get('/payment-methods'), api.get('/groups'), api.get('/accounts'), api.get('/settings')]);
     setRows(rs);
     setPayments(ps);
     setGroups(gs);
     setAccounts(accs);
+    setSettings(cfg);
   }
   useEffect(() => { load(); }, []);
   async function parseUrl(url) {
@@ -751,9 +753,15 @@ function Market() {
   function removePayment(idx) {
     setForm(f => ({ ...f, payments: f.payments.filter((_, i) => i !== idx) }));
   }
+  const monthTotal = rows.filter(r => monthKey(r.date) === monthKey(today())).reduce((sum, r) => sum + Number(r.total || 0), 0);
+  const limit = Number(settings.marketLimit) || 0;
   return (
     <div>
       <div className="page-header"><div><h1>Mercado</h1><div className="subtitle">Compras por NFC-e, mercado e itens</div></div><button className="btn accent" onClick={() => setScanOpen(true)}>Ler QR</button></div>
+      <div className="quick-grid">
+        <div className="glass-sm"><label>Total atual</label><strong>{money(monthTotal)}</strong></div>
+        <div className="glass-sm"><label>Limite restante</label><strong>{money(limit - monthTotal)}</strong></div>
+      </div>
       {error && <div className="error-msg mb-2">{error}</div>}
       <form className="glass form-grid market-form" onSubmit={save}>
         <input className="input" type="date" value={form.date} onChange={e => setForm({ ...form, date: e.target.value })} />
@@ -861,6 +869,7 @@ function Settings() {
     <div>
       <div className="page-header"><div><h1>Configurações</h1><div className="subtitle">Cadastros usados nos filtros e transações</div></div></div>
       <AppearanceManager />
+      <LimitsManager />
       <div className="settings-grid">
         <ConfigManager title="Tags" endpoint="/categories" emptyName="Nova tag" />
         <ConfigManager title="Grupos" endpoint="/groups" emptyName="Novo grupo" />
@@ -868,6 +877,29 @@ function Settings() {
         <ConfigManager title="Formas de pagamento" endpoint="/payment-methods" emptyName="Nova forma" />
       </div>
     </div>
+  );
+}
+
+function LimitsManager() {
+  const [form, setForm] = useState({ marketLimit: 115 });
+  async function load() {
+    setForm(await api.get('/settings'));
+  }
+  useEffect(() => { load(); }, []);
+  async function save(e) {
+    e.preventDefault();
+    setForm(await api.put('/settings', { marketLimit: Number(form.marketLimit) || 0 }));
+  }
+  return (
+    <section className="glass mb-2">
+      <div className="settings-head">
+        <div><h3>Limites</h3><div className="subtitle">Valores usados nos resumos</div></div>
+        <form className="limit-form" onSubmit={save}>
+          <input className="input" type="number" step="0.01" value={form.marketLimit ?? ''} onChange={e => setForm({ ...form, marketLimit: e.target.value })} />
+          <button className="btn accent">Salvar</button>
+        </form>
+      </div>
+    </section>
   );
 }
 

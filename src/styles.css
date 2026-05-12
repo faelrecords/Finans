@@ -202,6 +202,7 @@ th { font-size: 11px; font-weight: 700; color: var(--text-tertiary); text-transf
 .group-row { display: grid; grid-template-columns: minmax(180px, 1fr) auto auto; gap: 10px; align-items: center; padding-top: 8px; border-top: 1px solid var(--border); }
 .settings-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; align-items: start; }
 .settings-head { display: flex; justify-content: space-between; align-items: center; gap: 14px; flex-wrap: wrap; }
+.limit-form { display: grid; grid-template-columns: 160px auto; gap: 10px; align-items: center; }
 .config-card { display: grid; gap: 14px; }
 .config-form { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: center; }
 .config-form .select { min-width: 110px; }
@@ -251,7 +252,7 @@ th { font-size: 11px; font-weight: 700; color: var(--text-tertiary); text-transf
 .drawer-section { display: grid; gap: 4px; }
 
 @media (max-width: 960px) {
-  .quick-grid, .form-grid, .market-form, .debt-form, .mini-market-form, .payment-row, .grid-2, .settings-grid, .config-form, .details-summary, .score-grid { grid-template-columns: 1fr; }
+  .quick-grid, .form-grid, .market-form, .debt-form, .mini-market-form, .payment-row, .grid-2, .settings-grid, .config-form, .details-summary, .score-grid, .limit-form { grid-template-columns: 1fr; }
   .meta-grid { grid-template-columns: 1fr; }
   .meta-full { grid-column: auto; }
   .widget.size-1, .widget.size-2, .widget.size-3, .widget.size-4, .widget.size-6, .widget.size-8 { grid-column: span 12; }
